@@ -1,10 +1,10 @@
 # Weyland
 
-Weyland provides an alternative way to write regular expression (regex) and a lexer using them.
+Weyland provides an alternative way to write regular expression handling incomplete matching and  lexers using them.
 
 ## Syntax of regular expression
 
-In Weyland, we call regular expression **rex** instead of regex to differenciate them.
+In Weyland, we call regular expression **rex** instead of *regex* to differenciate them.
 
 ### Sequence
 
@@ -22,7 +22,7 @@ In Weyland, we call regular expression **rex** instead of regex to differenciate
 
 ### Special chararacters
 
-* ``#`` means any digits
+* ``#`` means any digits (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 * ``@`` means any letters
 * ``$`` means any digits, letters and the underscore character (_)
 * ``.`` means any characters which is not a new line
@@ -31,7 +31,17 @@ In Weyland, we call regular expression **rex** instead of regex to differenciate
 
 * In a choice, **you can only choose between one element** not between sequences,
 * In a choice, no repeated element nor optionnal element.
+* You can only use terminals and special characters in rex definitions.
+
+## Lexers
+
+Weyland provides also several lexers using the incomplete matching feature of Weyland's rex.
 
 ### Languages available
 
-* A set of tokens is available for the languages: bnf, json, lua python and hamill.
+A set of lexers and associated tokens are available for the following languages: 
+
+* Data language: json,
+* Programming languages: lua, python,
+* Description languages: bnf, hamill.
+
