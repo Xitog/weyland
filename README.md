@@ -49,7 +49,10 @@ A set of lexers and associated tokens are available for the following languages:
 
 ## C. Websites
 
+List of websites about Weyland:
+
 * Source code on Github: https://github.com/Xitog/weyland
+* Documentation: https://github.com/Xitog/weyland
 * PyPI repository: https://pypi.org/project/weyland/
 * Stats: https://libraries.io/pypi/weyland
 
