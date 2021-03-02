@@ -1,7 +1,7 @@
 from setuptools import setup
 import weyland
 
-f = open('README.txt', mode='r', encoding='utf8')
+f = open('README.md', mode='r', encoding='utf8')
 long_desc = f.read()
 f.close()
 
@@ -14,7 +14,7 @@ setup(
 
     author='Damien Gouteux',
     author_email='damien.gouteux@gmail.com',
-    url="https://xitog.github.io/dgx",
+    url="https://github.com/Xitog/weyland",
     maintainer='Damien Gouteux',
     maintainer_email='damien.gouteux@gmail.com',
     
