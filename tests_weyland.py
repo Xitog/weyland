@@ -45,8 +45,14 @@ from datetime import datetime
 # Constants and globals
 #-------------------------------------------------------------------------------
 
-TEST_REGEX = True
-TEST_LEXER = True
+TEST_REGEX = False
+TEST_LEXER = False
+TEST_FUNK = False
+TEST_ASH = False
+TEST_BNF = False
+TEST_BNF_MINI = True
+TEST_PYTHON = False
+TEST_GAME = False
 
 Total = 0
 Good = 0
@@ -220,129 +226,178 @@ if TEST_REGEX:
 # Tests of Lexer
 #-------------------------------------------------------------------------------
 
-simple_one = Language('simple_one', {
-                'A': ['aaa'],
-                'B': ['bbb'],
-                'SPACE': [' '],
-            })
+if TEST_LEXER:
+    
+    simple_one = Language('simple_one', {
+                    'A': ['aaa'],
+                    'B': ['bbb'],
+                    'SPACE': [' '],
+                })
 
-test_one = Language('test_one', {
-                'KEYWORD' : ['bonjour', 'bon'],
-                'IDENTIFIER' : ['[@_]$*'],
-                'SPECIFIC_INTEGER' : ['08789'],
-                'ALL_INTEGER' : ['#+'],
-                'OPERATOR' : ['\+', '\+='],
-                'NEWLINE' : ['\n'],
-                'WRONGINT' : ['#+@+$+'],
-                'SPACE': [' '],
-            })
+    test_one = Language('test_one', {
+                    'KEYWORD' : ['bonjour', 'bon'],
+                    'IDENTIFIER' : ['[@_]$*'],
+                    'SPECIFIC_INTEGER' : ['08789'],
+                    'ALL_INTEGER' : ['#+'],
+                    'OPERATOR' : ['\+', '\+='],
+                    'NEWLINE' : ['\n'],
+                    'WRONGINT' : ['#+@+$+'],
+                    'SPACE': [' '],
+                })
 
-tests = [
-    TestLexer(text = '1.2', language = LANGUAGES['json'], nb = 1),
-    TestLexer(text = 'aaa bbb', language = simple_one, nb = 3),
-    TestLexer(text = '08789 bonjour', language = test_one, nb = 3),
-    TestLexer(text = '2 22 abc 2a2 a+b', language = test_one, nb = 11),
-    TestLexer(text = 'bonjour 08789 b2974 0b01111 breaka break', language = LANGUAGES['ash'], nb = 11),
-    TestLexer(text = 'bonjour bon bonjour 08789 22 abc + += a+b \n c _d 2a2 #a', language = LANGUAGES['ash'], nb = 30)
-]
-for tst in tests:
-    print('------------------------------')
-    print(f'{tst.text} with lang={tst.language}')
-    lexer = Lexer(tst.language, debug=False)
-    tokens = lexer.lex(tst.text)
-    print()
-    print(f'{tst.text} => {tokens} ({len(tokens)})')
-    for i, t in enumerate(tokens):
-        print('   ', i, t.typ, t.val)
-    Total += 1
-    if len(tokens) != tst.nb:
-        print(f'ERROR: Wrong number of tokens: {len(tokens)}, expected: {tst.nb}')
-        Bad += 1
-    else:
-        Good += 1
-        print(f'OK')
-
+    tests = [
+        TestLexer(text = '1.2', language = LANGUAGES['json'], nb = 1),
+        TestLexer(text = 'aaa bbb', language = simple_one, nb = 3),
+        TestLexer(text = '08789 bonjour', language = test_one, nb = 3),
+        TestLexer(text = '2 22 abc 2a2 a+b', language = test_one, nb = 11),
+        TestLexer(text = 'bonjour 08789 b2974 0b01111 breaka break', language = LANGUAGES['ash'], nb = 11),
+        TestLexer(text = 'bonjour bon bonjour 08789 22 abc + += a+b \n c _d 2a2 #a', language = LANGUAGES['ash'], nb = 30)
+    ]
+    for tst in tests:
+        print('------------------------------')
+        print(f'{tst.text} with lang={tst.language}')
+        lexer = Lexer(tst.language, debug=False)
+        tokens = lexer.lex(tst.text)
+        print()
+        print(f'{tst.text} => {tokens} ({len(tokens)})')
+        for i, t in enumerate(tokens):
+            print('   ', i, t.typ, t.val)
+        Total += 1
+        if len(tokens) != tst.nb:
+            print(f'ERROR: Wrong number of tokens: {len(tokens)}, expected: {tst.nb}')
+            Bad += 1
+        else:
+            Good += 1
+            print(f'OK')
+    
 #-------------------------------------------------------------------------------
 # Breaking it: we must trace ALL the completes before (complete + overload)
 #-------------------------------------------------------------------------------
 
-funk = Language('funk', {
-            'aaab': ['aaab'],
-            'aa': ['aa'],
-            'ac': ['ac'],
-      })
-lex = Lexer(funk, debug=True)
-lex.info()
-reg(lex.check("aaac",
-          ['aa', 'ac'],
-          ['aa', 'ac']))
+if TEST_FUNK:
+    
+    funk = Language('funk', {
+                'aaab': ['aaab'],
+                'aa': ['aa'],
+                'ac': ['ac'],
+          })
+    lex = Lexer(funk, debug=True)
+    lex.info()
+    reg(lex.check("aaac",
+              ['aa', 'ac'],
+              ['aa', 'ac']))
 
 #-------------------------------------------------------------------------------
 # Tests for the Ash language
 #-------------------------------------------------------------------------------
 
-print('\nTest lexer')
-lex = Lexer(LANGUAGES['ash'], discards=['blank'], debug=True)
-reg(lex.check('if A then 5 end',
-          ['keyword', 'identifier', 'keyword', 'integer', 'keyword'],
-          ['if'     , 'A'         , 'then'   , '5'      , 'end']))
+if TEST_ASH:
+    
+    print('\nTest lexer')
+    lex = Lexer(LANGUAGES['ash'], discards=['blank'], debug=True)
+    reg(lex.check('if A then 5 end',
+              ['keyword', 'identifier', 'keyword', 'integer', 'keyword'],
+              ['if'     , 'A'         , 'then'   , '5'      , 'end']))
 
 #-------------------------------------------------------------------------------
 # Tests for the BNF language
 #-------------------------------------------------------------------------------
 
-print('\nTest "abc" "def" with bnf language')
-lex = Lexer(LANGUAGES['bnf'])
-reg(lex.check('"abc" "def"',
-          ['string', 'blank', 'string'],
-          ['"abc"' , ' '    , '"def"']))
+if TEST_BNF:
+    
+    print('\nTest "abc" "def" with BNF language')
+    lex = Lexer(LANGUAGES['bnf'])
+    reg(lex.check('"abc" "def"',
+              ['string', 'blank', 'string'],
+              ['"abc"' , ' '    , '"def"']))
 
-print('\nTest [ (A B) C ] D with bnf language')
-lex = Lexer(LANGUAGES['bnf'], discards=['blank'], debug=True)
-reg(lex.check('[ (A B) C ] D',
-          ['separator', 'separator', 'identifier', 'identifier', 'separator', 'identifier', 'separator', 'identifier'],
-          ['['        , '('        , 'A'         , 'B'         , ')'        , 'C'         , ']'        , 'D']))
+    print('\nTest [ (A B) C ] D with bnf language')
+    lex = Lexer(LANGUAGES['bnf'], discards=['blank'], debug=True)
+    reg(lex.check('[ (A B) C ] D',
+              ['separator', 'separator', 'identifier', 'identifier', 'separator', 'identifier', 'separator', 'identifier'],
+              ['['        , '('        , 'A'         , 'B'         , ')'        , 'C'         , ']'        , 'D']))
+
+#-------------------------------------------------------------------------------
+# Tests for the minimal BNF language
+#-------------------------------------------------------------------------------
+
+if TEST_BNF_MINI:
+    
+    print('\n-----------------------------------')
+    print('Test for the minimal BNF language')
+    print('-----------------------------------\n')
+
+    lex = Lexer(LANGUAGES['bnf-mini'], discards=['blank']) #, debug=True)
+    reg(lex.check('<digit> ::= "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"',
+                  ['keyword', 'operator', 'string', 'operator', 'string', 'operator', 'string', 'operator'
+                                        , 'string', 'operator', 'string', 'operator', 'string', 'operator'
+                                        , 'string', 'operator', 'string', 'operator', 'string', 'operator'],
+                  ['<digit>', '::='     , '"1"'   , '|'       , '"2"'   , '|'       , '"3"'   , '|'       ,
+                                          '"4"'   , '|'       , '"5"'   , '|'       , '"6"'   , '|'       ,
+                                          '"7"'   , '|'       , '"8"'   , '|'       , '"9"']))
+
+    print("")
+
+    reg(lex.check('<digit_zero> ::= <digit> | "0"',
+                  ['keyword', 'operator', 'keyword', 'operator', 'string'],
+                  ['<digit_zero>', '::=', '<digit>', '|', '"0"']))
+
+    print("")
+
+    reg(lex.check("# Can't start by a zero",
+                  ["comment"],
+                  ["# Can't start by a zero"]))
+
+    print("")
+
+    reg(lex.check('<integer> ::= <digit> | <digit_zero> <integer>',
+                  ['keyword', 'operator', 'keyword', 'operator', 'keyword', 'keyword'],
+                  ['<integer>', '::=', '<digit>', '|', '<digit_zero>', '<integer>']))
+
+    print("")
+
+    reg(lex.check('<after_dot_float> ::= <digit_zero> | <digit_zero> <after_dot_float>',
+                  ['keyword', 'operator', 'keyword', 'operator', 'keyword', 'keyword'],
+                  ['<after_dot_float>', '::=', '<digit_zero>', '|', '<digit_zero>', '<after_dot_float>']))
+
+    print("")
+
+    reg(lex.check('<float> ::= <integer> "." <after_dot_float>',
+                  ['keyword', 'operator', 'keyword', 'string', 'keyword'],
+                  ['<float>', '::=', '<integer>', '"."', '<after_dot_float>']))
+
+    print("")
+
+    simple_lang = """
+    
+    <digit> ::= "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+    
+    <digit_zero> ::= <digit> | "0"
+    
+    # Can't start by a zero
+    <integer> ::= <digit> | <digit_zero> <integer>
+    
+    <after_dot_float> ::= <digit_zero> | <digit_zero> <after_dot_float>
+
+    <float> ::= <integer> "." <after_dot_float>
+    """
+    #parser = Parser()
 
 #-------------------------------------------------------------------------------
 # Tests for the python language
 #-------------------------------------------------------------------------------
 
-print('\nTests of python language')
-lex = Lexer(LANGUAGES['python'], debug=False)
-reg(lex.check("Test 1999",
-          ['identifier', 'blank', 'integer'],
-          ['Test'  , ' '    , '1999']))
+if TEST_PYTHON:
+    
+    print('\nTests of python language')
+    lex = Lexer(LANGUAGES['python'], debug=False)
+    reg(lex.check("Test 1999",
+              ['identifier', 'blank', 'integer'],
+              ['Test'  , ' '    , '1999']))
 
 #-------------------------------------------------------------------------------
 # Tests for the game language
 #-------------------------------------------------------------------------------
-
-print('\nTests of game language')
-lex = Lexer(LANGUAGES['game'], debug=False)
-lex.info()
-
-reg(lex.check("Test 1999",
-          ['normal', 'blank', 'number'],
-          ['Test'  , ' '    , '1999']))
-
-reg(lex.check("3D 3 D3",
-          ['wrong_int', 'blank', 'number', 'blank', 'normal'],
-          ['3D'    , ' '    , '3'     , ' '    , 'D3']))
-
-reg(lex.check("Baldur's Gate",
-          ['normal'  , 'blank', 'normal'],
-          ["Baldur's", ' '    , 'Gate']))
-
-reg(lex.check("FarCry: Blood Dragon",
-          ['normal', 'operator', 'blank', 'normal', 'blank', 'normal'],
-          ['FarCry', ':'       , ' '    , 'Blood' , ' '    , 'Dragon']))
-
-print('Ignore blank')
-lex.ignore('blank')
-reg(lex.check("Je suis un jeu",
-          ['normal', 'normal', 'normal', 'normal'],
-          ['Je'    , 'suis'  , 'un'    , 'jeu']))
-lex.clear_ignored()
 
 def check_html(lang, text, expected, raws=None):
     global Total, Good
@@ -355,13 +410,42 @@ def check_html(lang, text, expected, raws=None):
     Total += 1
     Good += 1
 
-check_html('game', 'Test 1999', '<span class="game-normal">Test</span><span class="game-blank"> </span><span class="game-number">1999</span>')
+if TEST_GAME:
+    
+    print('\nTests of game language')
+    lex = Lexer(LANGUAGES['game'], debug=False)
+    lex.info()
 
-check_html('game', 'Test 1999', '<span class="game-normal">Test</span> <span class="game-number">1999</span>', raws=['blank'])
+    reg(lex.check("Test 1999",
+              ['normal', 'blank', 'number'],
+              ['Test'  , ' '    , '1999']))
 
-check_html('bnf', '<bonjour>', '<span class="bnf-keyword">&lt;bonjour&gt;</span>')
+    reg(lex.check("3D 3 D3",
+              ['wrong_int', 'blank', 'number', 'blank', 'normal'],
+              ['3D'    , ' '    , '3'     , ' '    , 'D3']))
 
-#lex.ignore([1, 'a'])
+    reg(lex.check("Baldur's Gate",
+              ['normal'  , 'blank', 'normal'],
+              ["Baldur's", ' '    , 'Gate']))
+
+    reg(lex.check("FarCry: Blood Dragon",
+              ['normal', 'operator', 'blank', 'normal', 'blank', 'normal'],
+              ['FarCry', ':'       , ' '    , 'Blood' , ' '    , 'Dragon']))
+
+    print('Ignore blank')
+    lex.ignore('blank')
+    reg(lex.check("Je suis un jeu",
+              ['normal', 'normal', 'normal', 'normal'],
+              ['Je'    , 'suis'  , 'un'    , 'jeu']))
+    lex.clear_ignored()
+
+    check_html('game', 'Test 1999', '<span class="game-normal">Test</span><span class="game-blank"> </span><span class="game-number">1999</span>')
+    
+    check_html('game', 'Test 1999', '<span class="game-normal">Test</span> <span class="game-number">1999</span>', raws=['blank'])
+    
+    check_html('bnf', '<bonjour>', '<span class="bnf-keyword">&lt;bonjour&gt;</span>')
+
+    #lex.ignore([1, 'a'])
 
 #-------------------------------------------------------------------------------
 # Display results

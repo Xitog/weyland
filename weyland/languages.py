@@ -79,6 +79,16 @@ LANGUAGES = {
         {
         }
     ),
+    'bnf-mini': Language('bnf-mini', {
+            'keyword': ['<[@#_- ]+>'],   # non-terminal
+            'string' : ['".*"', "'.*'"], # terminal
+            'operator': ['::=', '|'],    # affect and choice
+            'blank': [' +'],
+            'newline' : ['\n'],
+            'comment': ['\#.*'],
+        },
+        {}
+    ),
     'hamill' : Language('hamill', {
             'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
             'identifier' : ['[@_]$*'],
