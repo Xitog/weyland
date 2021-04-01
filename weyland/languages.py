@@ -122,7 +122,8 @@ LANGUAGES = {
         }
     ),
     'ash': Language('ash', {
-            'keyword' : ['if', 'then', 'else', 'end', 'while', 'do', 'for',
+            'keyword' : ['if', 'then', 'elif', 'else', 'end',
+                 'while', 'do', 'for',
                  'break', 'next', 'return',
                  'var', 'fun', 'sub', 'get', 'set', 'class',
                  'import', 'from', 'as',
@@ -134,7 +135,7 @@ LANGUAGES = {
             'TYPE' : [':', '->'],
             'FAST' : ['=>'],
             'LABEL' : ['::'],
-            'UNARY_OPERATOR' : ['-', 'not', r'\#', '~'],
+            'unary_operator' : ['-', 'not', r'\#', '~'],
             # New
             'integer' : [r'#+'],
             'boolean' : ['false', 'true'],
@@ -150,7 +151,7 @@ LANGUAGES = {
             'blank': [' +'],
             'newline' : ['\n'],
             'line_comment': ['--'],
-            'string' : ['"[@#_- <>:=,;|\']*"', "'[@#_- <>:=,;|\"]*'"],
+            'string' : ['"[@#_\.- <>:=,;|\']*"', "'[@#_\.- <>:=,;|\"]*'"],
         },
         # Special
         {

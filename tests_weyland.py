@@ -42,21 +42,36 @@ from collections import namedtuple
 from datetime import datetime
 
 #-------------------------------------------------------------------------------
-# Constants and globals
+# Constants
 #-------------------------------------------------------------------------------
 
-TEST_REGEX = False
-TEST_LEXER = False
-TEST_FUNK = False
-TEST_ASH = False
-TEST_BNF = False
+TEST_REGEX    = False
+TEST_LEXER    = False
+TEST_FUNK     = False
+TEST_ASH      = True
+TEST_BNF      = False
 TEST_BNF_MINI = True
-TEST_PYTHON = False
-TEST_GAME = False
+TEST_PYTHON   = False
+TEST_GAME     = False
+
+DEBUG = False
+
+ID  = 'identifier'
+KW  = 'keyword'
+SEP = 'separator'
+INT = 'integer'
+BIN = 'binary_operator'
+UNA = 'unary_operator'
+NL  = 'newline'
+STR = 'string'
+
+#-------------------------------------------------------------------------------
+# Globals
+#-------------------------------------------------------------------------------
 
 Total = 0
-Good = 0
-Bad = 0
+Good  = 0
+Bad   = 0
 
 #-------------------------------------------------------------------------------
 # Types
@@ -119,11 +134,6 @@ def test_regex(debug=False):
             Bad += 1
         console.write(f'   {res_str} expected {t.expected} and found {res}', color)
         previous = t.regex
-
-def display(tokens):
-   print(f'Tokens: {len(tokens)}')
-   for i, t in enumerate(tokens):
-        print(f'    {i:5d}. {t.typ:10s} ({t.first:3d},{t.last:3d}) |{t.val:s}|')
 
 #-------------------------------------------------------------------------------
 # Tests of Regex
@@ -281,7 +291,7 @@ if TEST_FUNK:
                 'aa': ['aa'],
                 'ac': ['ac'],
           })
-    lex = Lexer(funk, debug=True)
+    lex = Lexer(funk, debug=DEBUG)
     lex.info()
     reg(lex.check("aaac",
               ['aa', 'ac'],
@@ -292,12 +302,44 @@ if TEST_FUNK:
 #-------------------------------------------------------------------------------
 
 if TEST_ASH:
-    
-    print('\nTest lexer')
-    lex = Lexer(LANGUAGES['ash'], discards=['blank'], debug=True)
+
+    print('\n-----------------------------------')
+    print('Test Ash lexer')
+    print('-----------------------------------\n')
+
+    lex = Lexer(LANGUAGES['ash'], discards=['blank'], debug=DEBUG)
+
     reg(lex.check('if A then 5 end',
-              ['keyword', 'identifier', 'keyword', 'integer', 'keyword'],
-              ['if'     , 'A'         , 'then'   , '5'      , 'end']))
+              [KW  , ID , KW    , INT, KW],
+              ['if', 'A', 'then', '5', 'end']))
+
+    print("")
+
+    reg(lex.check('if A then 5 elif 6 else 7 end',
+              [KW,  ID  , KW    , INT, KW    , INT, KW    , INT, KW],
+              ['if', 'A', 'then', '5', 'elif', '6', 'else', '7', 'end']))
+
+    print("")
+
+    reg(lex.check('while A do 5 end',
+              [KW     , ID , KW  , INT, KW],
+              ['while', 'A', 'do', '5', 'end']))
+    print("")
+
+    reg(lex.check('do \n 5 \n while A end',
+              [KW  , NL  , INT, NL  , KW     , ID , KW],
+              ['do', '\n', '5', '\n', 'while', 'A', 'end']))
+    print("")
+
+    reg(lex.check('for a, b in c do 5 end',
+              [KW   , ID , SEP, ID , BIN , ID , KW  ,  INT, KW],
+              ['for', 'a', ',', 'b', 'in', 'c', 'do',  '5', 'end']))
+
+    print("")
+
+    reg(lex.check('import A, B from "mod.ash"',
+              [KW      ,  ID, SEP, ID , KW    , STR],
+              ['import', 'A', ',', 'B', 'from', '"mod.ash"']))
 
 #-------------------------------------------------------------------------------
 # Tests for the BNF language
@@ -306,13 +348,13 @@ if TEST_ASH:
 if TEST_BNF:
     
     print('\nTest "abc" "def" with BNF language')
-    lex = Lexer(LANGUAGES['bnf'])
+    lex = Lexer(LANGUAGES['bnf'], debug=DEBUG)
     reg(lex.check('"abc" "def"',
               ['string', 'blank', 'string'],
               ['"abc"' , ' '    , '"def"']))
 
     print('\nTest [ (A B) C ] D with bnf language')
-    lex = Lexer(LANGUAGES['bnf'], discards=['blank'], debug=True)
+    lex = Lexer(LANGUAGES['bnf'], discards=['blank'], debug=DEBUG)
     reg(lex.check('[ (A B) C ] D',
               ['separator', 'separator', 'identifier', 'identifier', 'separator', 'identifier', 'separator', 'identifier'],
               ['['        , '('        , 'A'         , 'B'         , ')'        , 'C'         , ']'        , 'D']))
@@ -327,7 +369,8 @@ if TEST_BNF_MINI:
     print('Test for the minimal BNF language')
     print('-----------------------------------\n')
 
-    lex = Lexer(LANGUAGES['bnf-mini'], discards=['blank']) #, debug=True)
+    lex = Lexer(LANGUAGES['bnf-mini'], discards=['blank'], debug=DEBUG)
+
     reg(lex.check('<digit> ::= "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"',
                   ['keyword', 'operator', 'string', 'operator', 'string', 'operator', 'string', 'operator'
                                         , 'string', 'operator', 'string', 'operator', 'string', 'operator'
@@ -390,7 +433,7 @@ if TEST_BNF_MINI:
 if TEST_PYTHON:
     
     print('\nTests of python language')
-    lex = Lexer(LANGUAGES['python'], debug=False)
+    lex = Lexer(LANGUAGES['python'], debug=DEBUG)
     reg(lex.check("Test 1999",
               ['identifier', 'blank', 'integer'],
               ['Test'  , ' '    , '1999']))
@@ -401,7 +444,7 @@ if TEST_PYTHON:
 
 def check_html(lang, text, expected, raws=None):
     global Total, Good
-    lex = Lexer(LANGUAGES[lang], debug=False)
+    lex = Lexer(LANGUAGES[lang], debug=DEBUG)
     print('Text:', text)
     output = lex.to_html(text=text, raws=raws)
     print('Result:', output)
@@ -413,7 +456,7 @@ def check_html(lang, text, expected, raws=None):
 if TEST_GAME:
     
     print('\nTests of game language')
-    lex = Lexer(LANGUAGES['game'], debug=False)
+    lex = Lexer(LANGUAGES['game'], debug=DEBUG)
     lex.info()
 
     reg(lex.check("Test 1999",

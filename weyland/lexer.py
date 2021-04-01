@@ -125,10 +125,11 @@ class Lexer:
             return False
         print(f'Tokens: {len(tokens)}')
         for i, t in enumerate(tokens):
+            val = t.val if t.val != '\n' else '<NL>'
             if t.typ == typs[i] and t.val == vals[i]:
-                print(f'OK  {i:5d}. {t.typ:10s} |{t.val:s}|')
+                print(f'OK  {i:5d}. {t.typ:10s} |{val:s}|')
             else:
-                print(f'ERROR   {i:5d}. {t.typ:10s} |{t.val:s}|')
+                print(f'ERROR   {i:5d}. {t.typ:10s} |{val:s}|')
                 print(f'EXPECTED {typs[i]:10s} |{vals[i]:s}|')
                 return False
         return True
