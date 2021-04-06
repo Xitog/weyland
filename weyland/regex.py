@@ -48,7 +48,6 @@
 
 from enum import Enum
 from collections import namedtuple
-from weyland.console import Console
 
 #-------------------------------------------------------------------------------
 # Types
