@@ -91,13 +91,13 @@ LANGUAGES = {
     ),
     'hamill' : Language('hamill', {
             'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
-            'identifier' : ['[@_]$*'],
+            'identifier' : ['[@_]&*'],
             'integer' : ['#+'],
             'boolean' : ['true', 'false'],
             'nil': [],
             'operator': [':'],
             'separator' : ['{', '}', '\#', '.'],
-            'wrong_int' : ['#+$+'],
+            'wrong_int' : ['#+&+'],
             'blank': [' +'],
             'newline' : ['\n'],
             'line_comment': ['§§'],
@@ -128,7 +128,7 @@ LANGUAGES = {
                  'var', 'fun', 'sub', 'get', 'set', 'class',
                  'import', 'from', 'as',
                  'try', 'catch', 'finally', 'raise'],
-            'identifier' : ['[@_]$*'],
+            'identifier' : ['[@_]&*'],
             # Old
             'AFFECTATION' : ['='],
             'COMBINED_AFFECTATION' : [r'\+=', '-=', r'\*=', '/=', '//=', r'\*\*=', '%='],
@@ -143,14 +143,14 @@ LANGUAGES = {
             'binary_operator' : ['and', 'or', # boolean
                   'in', # belongs to
                   r'\+', '-', r'\*', '/', '//', r'\*\*', '%', # mathematical
-                  '&', '|', '~', '>>', '<<', # bitwise
+                  '\&', '|', '~', '>>', '<<', # bitwise
                   '<', '<=', '>', '>=', '==', '!=', # comparison
                   '\.'], # call
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'wrong_int' : ['#+@+$+'],
+            'wrong_int' : ['#+@+&+'],
             'blank': [' +'],
             'newline' : ['\n'],
-            'line_comment': ['--'],
+            'line_comment': ['--.+\n', '--.+$'],
             'string' : ['"[@#_\.- <>:=,;|\']*"', "'[@#_\.- <>:=,;|\"]*'"],
         },
         # Special
@@ -159,7 +159,7 @@ LANGUAGES = {
         }
     ),
     'json': Language('json', {
-            'identifier' : ['[@_]$*'],
+            'identifier' : ['[@_]&*'],
             'number' : ['#+', '#+\.#+'],
             'boolean': ['true', 'false'],
             'string' : ['".*"', "'.*'"],
@@ -170,7 +170,7 @@ LANGUAGES = {
             'line_comment' : [],
             'newline' : ['\n'],
             'blank': [' +'],
-            'wrong_int' : ['#+@+$+'],
+            'wrong_int' : ['#+@+&+'],
         },
         # Special
         {
@@ -184,7 +184,7 @@ LANGUAGES = {
             'keyword': ['and', 'break', 'do', 'else', 'elseif', 'end', 'for',
                         'function', 'goto', 'if', 'in', 'local', 'not', 'or',
                         'repeat', 'return', 'then', 'until', 'while'],
-            'identifier' : ['[@_]$*'],
+            'identifier' : ['[@_]&*'],
             'number' : ['#+', '#+\.#+'],
             'boolean': ['true', 'false'],
             'string' : ['".*"', "'.*'"],
@@ -192,10 +192,10 @@ LANGUAGES = {
             'operator': ['=', '==', '~=', r'\+', r'\*', '-', '/', '%', '^',
                          '<', '<=', '>', '>=', r'\.\.', r'\#', ':'],
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'line_comment': ['--.+\n', '--.+'], # the second is for @@-- xxx@@ without \n
+            'line_comment': ['--.+\n', '--.+$'],
             'newline' : ['\n'],
             'blank': [' +'],
-            'wrong_int' : ['#+@+$+'],
+            'wrong_int' : ['#+@+&+'],
             'special': ['ipairs', 'pairs', '\?', 'print'], # ? is here for demonstration only
         },
         # Special
@@ -209,7 +209,7 @@ LANGUAGES = {
                      'continue', 'lambda', 'try', 'as', 'def', 'from', 'while',
                      'nonlocal', 'assert', 'del', 'global', 'not', 'with', 'if',
                      'async', 'elif', 'or', 'yield'],
-            'identifier' : ['[@_]$*'],
+            'identifier' : ['[@_]&*'],
             'integer' : ['#+'],
             'boolean' : ['True', 'False'],
             'string' : ['".*"', "'.*'"],
@@ -219,10 +219,10 @@ LANGUAGES = {
                       '&=', '//=', '<<=', '%=', '\*=', '|=', r'\*\*=', '>>=', '-=',
                       '/=', '^=', '\.', '='],
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'line_comment': ['\#.+\n'],
+            'line_comment': ['\#.+\n', '\#.+$'],
             'newline' : ['\n'],
             'blank': [' +'],
-            'wrong_int' : ['#+@+$+'],
+            'wrong_int' : ['#+@+&+'],
             'special': ['print'],
         },
         # Special

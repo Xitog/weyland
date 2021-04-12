@@ -36,7 +36,7 @@
 # Import
 #-------------------------------------------------------------------------------
 
-from weyland import Rex, RexTest, AwaitedResult, Console, Check
+from weyland import Rex
 from weyland import Lexer, LANGUAGES, Language, __version__
 from collections import namedtuple
 from datetime import datetime
@@ -50,7 +50,7 @@ TEST_LEXER    = False
 TEST_FUNK     = False
 TEST_ASH      = True
 TEST_BNF      = False
-TEST_BNF_MINI = True
+TEST_BNF_MINI = False
 TEST_PYTHON   = False
 TEST_GAME     = False
 
@@ -77,11 +77,35 @@ Bad   = 0
 # Types
 #-------------------------------------------------------------------------------
 
+RexTest = namedtuple('Test', ['regex', 'length', 'candidate', 'expected'])
 TestLexer = namedtuple('Test', ['text', 'language', 'nb'])
 
 #-------------------------------------------------------------------------------
 # Function
 #-------------------------------------------------------------------------------
+
+class Check:
+    """Check takes two parameters: good and over.
+       If good and over are empty, it will not match.
+       If over is ... good will not be a match but only a partial match"""
+
+    def __init__(self, good='', over=''):
+        self.good = good
+        self.over = over
+
+    def check(self, res):
+        if self.over == '...': # partial
+            return not res.match and res.partial and res.text[:res.length] == self.good
+        elif res.length is not None:
+            return res.match and res.text[:res.length] == self.good and res.get_overload() == self.over
+        else:
+            return self.good == ''
+
+    def __str__(self):
+        return f'+|{self.good}| -|{self.over}|'
+
+def xprint(string, color=None):
+    print(string)
 
 def reg(r):
     global Total, Good, Bad
@@ -93,12 +117,11 @@ def reg(r):
 
 def test_regex(debug=False):
     global Total, Good, Bad
-    console = Console()
     previous = None
     for test_index in tests:
         t = test_library[test_index]
         if previous != t.regex:
-            print('-----------------------')
+            xprint('-----------------------')
             regex = None
             msg = None
             try:
@@ -108,20 +131,20 @@ def test_regex(debug=False):
             end = '\n' if debug else ''
             if t.length is None:
                 if regex is None:
-                    console.write(f'= Building of {t.regex} failed as expected: {msg}', color='STRING')
+                    xprint(f'= Building of {t.regex} failed as expected: {msg}', color='STRING')
                 else:
-                    console.write(f"= Building of {t.regex} didn't fail as expected", color='COMMENT')
+                    xprint(f"= Building of {t.regex} didn't fail as expected", color='COMMENT')
                 continue
             elif regex is None:
-                print(msg)
+                xprint(msg)
                 raise Exception("No regex!")
             elif len(regex) != t.length:
-                console.write(f'= Building {regex} expected ({t.length}) -> KO{end}', color='COMMENT')
+                xprint(f'= Building {regex} expected ({t.length}) -> KO{end}', color='COMMENT')
                 continue
-            console.write(f'= Building {regex} expected ({t.length}) -> OK{end}', color='KEYWORD')
+            xprint(f'= Building {regex} expected ({t.length}) -> OK{end}', color='KEYWORD')
             if debug:
                 regex.info(starter='    ')
-        console.write(f'{end}= {test_index:5d} Matching |{t.candidate}| vs {regex}{end}', color='KEYWORD')
+        xprint(f'{end}= {test_index:5d} Matching |{t.candidate}| vs {regex}{end}', color='KEYWORD')
         res = regex.match(t.candidate)
         Total += 1
         if t.expected.check(res):
@@ -132,19 +155,21 @@ def test_regex(debug=False):
             res_str = 'ERROR'
             color = 'COMMENT'
             Bad += 1
-        console.write(f'   {res_str} expected {t.expected} and found {res}', color)
+        xprint(f'   {res_str} expected {t.expected} and found {res}', color)
         previous = t.regex
 
 #-------------------------------------------------------------------------------
 # Tests of Regex
 #-------------------------------------------------------------------------------
 
+# RexText : a rex, number of elements of the rex, test string, result
+
 test_library = {
 
       1: RexTest("'.*'", 3, "'Je suis un zorba'", Check("'Je suis un zorba'")),
     
     100: RexTest("abc", 3, "zor", Check('', 'zor')),
-    101: RexTest("abc", 3, "ab", Check('ab')),
+    101: RexTest("abc", 3, "ab", Check('ab', '...')),
     102: RexTest("abc", 3, "abc", Check('abc')),
     103: RexTest("abc", 3, "abcd", Check('abc', 'd')),
 
@@ -197,6 +222,21 @@ test_library = {
     513: RexTest("a\\\\", 2, "ab", Check('', 'ab')),
     514: RexTest("a\\\\", 2, "a\\b", Check('a\\', 'b')),
 
+    # Test of the "&" special char
+    600: RexTest("&", 1, "a", Check('a')),
+    601: RexTest("&", 1, "1", Check('1')),
+    602: RexTest("&*", 1, "abc255", Check('abc255')),
+
+    # Test of position
+    700: RexTest("hello", 5, "hello world", Check('hello', ' world')),
+    701: RexTest("hello$", 5, "hello world", Check()),
+    702: RexTest("hello$", 5, "hello", Check('hello')),
+    
+    703: RexTest("\#.*", 2, "# comment\n", Check('# comment', '\n')),
+    704: RexTest("\#.*", 2, "# comment", Check('# comment')),
+    705: RexTest("\#.*\n", 3, "# comment", Check('# comment', '...')),
+    706: RexTest("\#.*$", 2, "# comment", Check('# comment')),
+
     1000: RexTest("[ab]", 1, "c", Check()),
     1001: RexTest("[ab]", 1, "a", Check('a')),
     1002: RexTest("[ab]", 1, "b", Check('b')),
@@ -204,9 +244,9 @@ test_library = {
     1004: RexTest("[ab]c", 2, "ab", Check('', 'ab')),
     1005: RexTest("[ab]c", 2, "ac", Check('ac')),
     
-    5000: RexTest(r"[@_]$*[\?!]?", 3, "_a15", Check('_a15')),
-    5001: RexTest(r"[@_]$*[\?!]?", 3, "4a", Check()),
-    5002: RexTest(r"[@_]$*[\?!]?", 3, "_isalpha?", Check('_isalpha?')),
+    5000: RexTest(r"[@_]&*[\?!]?", 3, "_a15", Check('_a15')),
+    5001: RexTest(r"[@_]&*[\?!]?", 3, "4a", Check()),
+    5002: RexTest(r"[@_]&*[\?!]?", 3, "_isalpha?", Check('_isalpha?')),
 
     9000: RexTest("#?#", None, None, None),
     9001: RexTest("#?1", None, None, None),
@@ -224,13 +264,17 @@ test_library = {
 start = datetime.now()
 
 if TEST_REGEX:
-    tests = test_library.keys() # [223]
-    test_regex(False)
+    tests = test_library.keys()
+    #tests = [706] #[223]
+    if len(tests) < 10:
+        test_regex(True)
+    else:
+        test_regex(False)
 
     # Independant test (uncounted)
-    rex = Rex('aaa')
-    res = rex.match('aaa')
-    Console().write(res, 'STRING')
+    #rex = Rex('aaa')
+    #res = rex.match('aaa')
+    #xprint(res, 'STRING')
 
 #-------------------------------------------------------------------------------
 # Tests of Lexer
@@ -494,11 +538,11 @@ if TEST_GAME:
 # Display results
 #-------------------------------------------------------------------------------
 
-Console().write('----------------------------------------', 'KEYWORD')
+xprint('----------------------------------------', 'KEYWORD')
 if Bad > 0:
-    Console().write(f'{Total} tests, {Good} good, {Bad} bad', 'COMMENT')
+    xprint(f'{Total} tests, {Good} good, {Bad} bad', 'COMMENT')
 else:
-    Console().write(f'{Total} tests, {Good} good, {Bad} bad', 'STRING')
+    xprint(f'{Total} tests, {Good} good, {Bad} bad', 'STRING')
 
 stop = datetime.now()
 print("Duration:", stop - start)
