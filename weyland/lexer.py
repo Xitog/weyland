@@ -30,7 +30,7 @@
 # Imports
 #-------------------------------------------------------------------------------
 
-from weyland.regex import Rex
+from weyland.regex import Regex
 from weyland.languages import Language # only for check
 import html
 
@@ -42,7 +42,7 @@ class TokenDef:
     
     def __init__(self, typ, pattern, debug=False):
         self.typ = typ
-        self.regex = Rex(pattern, debug=False)
+        self.regex = Regex(pattern, debug=False)
     
     def __str__(self):
         return f"TokenDef {self.typ}"

@@ -25,7 +25,33 @@
 # https://xitog.github.io/dgx (in French)
 #-------------------------------------------------------------------------------
 
-"""Regex: a alternative way to define regex"""
+"""Regex: an alternative way to define regex"""
+
+#-------------------------------------------------------------------------------
+#
+# class Element
+#       option          : boolean
+#       repeat          : boolean
+#       special         : boolean
+#       core            : char
+#
+# class Regex
+#       pattern         : string
+#       repr_pattern    : string (for representation, '\n' are replaced by '\\n')
+#       debug           : boolean
+#       elements        : List<Element>
+#       at_start        : boolean
+#       at_end          : boolean
+#
+# class Match
+#       regex           : Regex
+#       text            : string  Candidate text matching against the Regex
+#       match           : boolean Matched or not?
+#       partial         : boolean In case not matching, is it due to not enough chars?
+#       length          : ushort? Length of candidate text matched
+#       element_matches : List<uint> Length of candidate text matched for each elements of the Regex
+#
+#-------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 # Classes
@@ -49,7 +75,17 @@ class Element:
 
     def __str__(self):
         core = self.core if self.core != '\n' else '\\n'
-        return f'{core:2} repeat={str(self.repeat):5s} option={str(self.option):5s} special={str(self.special):5s}'
+        s = f'<Element |{core}|'
+        if self.repeat and self.option:
+            s += ' {0, n}'
+        elif self.repeat:
+            s += ' {1, n}'
+        elif self.option:
+            s += ' {0, 1}'
+        else:
+            s += ' {1, 1}'
+        return s + '>'
+        #return f'{core:2} repeat={str(self.repeat):5s} option={str(self.option):5s} special={str(self.special):5s}'
 
     def __repr__(self):
         core = self.core if self.core != '\n' else '\\n'
@@ -125,52 +161,7 @@ class Element:
         return res
 
 
-class Match:
-    """This class represents a result of a match"""
-
-    def __init__(self, text):
-        self.text = text
-        self.match = False
-        self.partial = False
-        self.length = None
-
-    def __len__(self):
-        return self.length
-
-    def is_partial(self):
-        """Not a match but the last char matched is the last char of the text"""
-        return not self.match and self.length == len(text)
-
-    def is_match(self):
-        return self.match
-
-    def get_match(self):
-        return '' if self.length is None else self.text[:self.length]
-
-    def is_overload(self):
-        if self.length is not None and self.length < len(self.text):
-            return True
-        else:
-            return False
-
-    def get_overload(self):
-        if self.length is None or self.length == len(self.text):
-            return ''
-        else:
-            return self.text[self.length:]
-        
-    def info(self):
-        print(text)
-        if self.last is not None:
-            print('^' * self.length)
-        else:
-            print('No match')
-
-    def __str__(self):
-        return f'<Match matched={self.match} partial={self.partial} res=|{self.get_match()}|>'
-
-
-class Rex:
+class Regex:
     """ This class handles the core of the Regex
         It compiles from a pattern (a simple string)
     """
@@ -193,11 +184,11 @@ class Rex:
         if self.pattern != '\n':
             return f"Regex |{self.repr_pattern}| ({len(self)})"
         else:
-            return f"Regex |NEWLINE| ({len(self)})"
+            return f"Regex |\\n| ({len(self)})"
 
     def __repr__(self):
-        if self.pattern != '\n':
-            return f"Regex |NEWLINE|"
+        if self.pattern == '\n':
+            return f"Regex |\\n|"
         else:
             return f"Regex |{self.repr_pattern}|"
     
@@ -229,7 +220,7 @@ class Rex:
                         raise Exception("No choice in choice")
                     elif c == '\\':
                         sub_index += 2
-                    elif c in Rex.MODIFIERS:
+                    elif c in Regex.MODIFIERS:
                         raise Exception("No modifiers ? + * in choice")
                     else:
                         sub_index += 1
@@ -245,7 +236,7 @@ class Rex:
                 self.elements = old
                 self.elements.append(Element(sub_elems))
                 index = sub_index + 1
-            elif c in Rex.MODIFIERS:
+            elif c in Regex.MODIFIERS:
                 if index == 0:
                     raise Exception(f'{c} without something to repeat in {self.repr_pattern}. Did you miss to escape?')
                 if c == '?':
@@ -262,11 +253,21 @@ class Rex:
                 if index + 1 >= len(self.pattern):
                     raise Exception("A regex cannot finish with an escaped char")
                 cnext = self.pattern[index + 1]
-                if cnext not in Rex.ESCAPABLES:
+                special = False
+                if cnext not in Regex.ESCAPABLES + ['d', 'a', 'w']:
                     raise Exception("Unable to escape char: " + cnext)
-                self.elements.append(Element(cnext))
+                elif cnext == 'd':
+                    cnext = '#'
+                    special = True
+                elif cnext == 'a':
+                    cnext = '@'
+                    special = True
+                elif cnext == 'w':
+                    cnext = '&'
+                    special = True
+                self.elements.append(Element(cnext, special=special))
                 index += 2
-            elif c in Rex.CLASSES or c in Rex.POSITIONS:
+            elif c in Regex.CLASSES or c in Regex.POSITIONS:
                 self.elements.append(Element(c, special=True))
                 index += 1
             else:
@@ -282,8 +283,11 @@ class Rex:
 
     def check_at(self, candidate, index):
         if index >= len(self.elements):
-            raise Exception('Index out of range of Rex')
+            raise Exception('Index out of range of Regex')
         return self.elements[index].check(candidate)
+
+    def __getitem__(self, index):
+        return self.elements[index]
 
     def __len__(self):
         return len(self.elements)
@@ -300,17 +304,17 @@ class Rex:
     
     def match(self, candidate):
         if self.debug:
-            print(f'Rex#match {self} vs |{candidate}|')
+            print(f'    Regex#match {self} vs |{candidate}|')
         matched = [0] * len(self.elements)
         index_candidate = 0
         index_regex = 0
-        final = Match(candidate)
+        final = Match(self, candidate)
         previous = False
         while index_candidate < len(candidate) and index_regex < len(self):
             elem = self.elements[index_regex]
             res = self.check_at(candidate[index_candidate], index_regex)
             if self.debug:
-                print(f'    iter {index_candidate=}/{len(candidate)-1} {index_regex=}/{len(self)-1} {candidate[index_candidate]} vs {elem} => {res}')
+                print(f'        iter {index_candidate=}/{len(candidate)-1} {index_regex=}/{len(self)-1} {candidate[index_candidate]} vs {elem} => {res}')
             if res:
                 # pb of |."| We should quit the '.' as soon as possible
                 if elem.is_repeatable():
@@ -329,15 +333,12 @@ class Rex:
                 else:
                     break
         # Get last none empty
-        if self.debug:
-            print(f'\n    Iter   Element                                    Num   Matched')
         res = True
         count = 0
         for i, c in enumerate(matched):
             count += matched[i]
             if self.debug:
                 cnd = candidate[i:i+matched[i]]
-                print(f'    {i:05d}. {str(self.elements[i]):30s} {matched[i]:05d} {str(cnd):8s}')
             if c == 0 and not self.elements[i].is_optionnal():
                 res = False
         # at_start is not tested because match search only at the start of the string
@@ -346,12 +347,73 @@ class Rex:
             res = False
         if self.debug:
             print()
-            print(f'    Candidate: ' + candidate)
-            print(f'    Unmatched: |{candidate[count:]}| (length={len(candidate[count:])})')
+            print(f'        Candidate: ' + candidate)
+            print(f'        Unmatched: |{candidate[count:]}| (length={len(candidate[count:])})')
             print()
         final.match = res
         final.partial = True if not final.match and count == len(candidate) else False
         if final.match or final.partial:
             final.length = count
+            final.element_matches = matched
         return final
+
+
+class Match:
+    """This class represents a result of a match"""
+
+    def __init__(self, regex, text):
+        self.regex           = regex  # Regex
+        self.text            = text     # Candidate text matching against the Regex
+        self.match           = False    # Matched or not?
+        self.partial         = False    # In case not matching, is it due to not enough chars?
+        self.length          = None     # Length of candidate text matched
+        self.element_matches = []       # Length of candidate text matched for each elements of the Regex
+
+    def __len__(self):
+        return self.length
+
+    def is_partial(self):
+        """Not a match but the last char matched is the last char of the text"""
+        return not self.match and self.length == len(text)
+
+    def is_match(self):
+        return self.match
+
+    def get_match(self):
+        return '' if self.length is None else self.text[:self.length]
+
+    def is_overload(self):
+        """There is some text after"""
+        if self.length is not None and self.length < len(self.text):
+            return True
+        else:
+            return False
+
+    def get_overload(self):
+        if self.length is None or self.length == len(self.text):
+            return ''
+        else:
+            return self.text[self.length:]
+        
+    def info(self, starter=''):
+        print(f"{starter}{self.text}")
+        if self.match or self.partial:
+            print(f"{starter}{'^' * self.length} matched")
+            last = 0
+            print(f'{starter}Iter  Element                Nb  Matched')
+            for i in range(len(self.regex)):
+                nb = self.element_matches[i]
+                tx = self.text[last:last+nb]
+                print(f"{starter}{i:05d} {str(self.regex[i]):22s} {nb:03d} |{tx}| (from {last})")
+                last += nb
+        else:
+            print('No match')
+
+    def __str__(self):
+        if self.match:
+            return f'<Match matched |{self.get_match()}|>'
+        elif self.partial:
+            return f'<Match partial |{self.get_match()}|>'
+        else:
+            return f'<Match none>'
 

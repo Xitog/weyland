@@ -37,3 +37,4 @@ from weyland.languages import RECOGNIZED_LANGUAGES, LANGUAGES, Language
 
 logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s')
 logging.getLogger().setLevel(logging.DEBUG)
+

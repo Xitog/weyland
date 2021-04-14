@@ -27,7 +27,7 @@
 """This file provides languages definition"""
 
 #-------------------------------------------------------------------------------
-# Globals and constants
+# Class
 #-------------------------------------------------------------------------------
 
 class Language:
@@ -40,11 +40,20 @@ class Language:
     def __str__(self):
         return self.name
 
-# text
-# bnf
-# hamill
-# game
-# ash, json, lua, python
+#-------------------------------------------------------------------------------
+# Globals and constants
+#-------------------------------------------------------------------------------
+
+# Shared definitions
+IDENTIFIER = ['[@_]&*']
+WRONG_INT = ['#+@&*']
+
+# Languages
+#   text
+#   bnf
+#   hamill
+#   game
+#   ash, json, lua, python
 
 LANGUAGES = {
     'text': Language('text', {
@@ -91,13 +100,13 @@ LANGUAGES = {
     ),
     'hamill' : Language('hamill', {
             'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
-            'identifier' : ['[@_]&*'],
+            'identifier' : IDENTIFIER,
             'integer' : ['#+'],
             'boolean' : ['true', 'false'],
             'nil': [],
             'operator': [':'],
             'separator' : ['{', '}', '\#', '.'],
-            'wrong_int' : ['#+&+'],
+            'wrong_int' : WRONG_INT,
             'blank': [' +'],
             'newline' : ['\n'],
             'line_comment': ['§§'],
@@ -114,7 +123,7 @@ LANGUAGES = {
             'number': ['#+'],
             'normal': ['[@_][@#\'-]*'], # Total Annihilation => 2 tokens, Baldur's => 1, Half-life => 1
             'blank': [' +'],
-            'wrong_int' : ['#+@+'],
+            'wrong_int' : WRONG_INT,
             'newline' : ['\n'],
             'operator': [':'] # FarCry: 
         },
@@ -128,7 +137,7 @@ LANGUAGES = {
                  'var', 'fun', 'sub', 'get', 'set', 'class',
                  'import', 'from', 'as',
                  'try', 'catch', 'finally', 'raise'],
-            'identifier' : ['[@_]&*'],
+            'identifier' : IDENTIFIER,
             # Old
             'AFFECTATION' : ['='],
             'COMBINED_AFFECTATION' : [r'\+=', '-=', r'\*=', '/=', '//=', r'\*\*=', '%='],
@@ -147,10 +156,10 @@ LANGUAGES = {
                   '<', '<=', '>', '>=', '==', '!=', # comparison
                   '\.'], # call
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'wrong_int' : ['#+@+&+'],
+            'wrong_int' : WRONG_INT,
             'blank': [' +'],
             'newline' : ['\n'],
-            'line_comment': ['--.+\n', '--.+$'],
+            'line_comment': ['--.*\n', '--.*$'],
             'string' : ['"[@#_\.- <>:=,;|\']*"', "'[@#_\.- <>:=,;|\"]*'"],
         },
         # Special
@@ -159,7 +168,7 @@ LANGUAGES = {
         }
     ),
     'json': Language('json', {
-            'identifier' : ['[@_]&*'],
+            'identifier' : IDENTIFIER,
             'number' : ['#+', '#+\.#+'],
             'boolean': ['true', 'false'],
             'string' : ['".*"', "'.*'"],
@@ -170,7 +179,7 @@ LANGUAGES = {
             'line_comment' : [],
             'newline' : ['\n'],
             'blank': [' +'],
-            'wrong_int' : ['#+@+&+'],
+            'wrong_int' : WRONG_INT,
         },
         # Special
         {
@@ -184,7 +193,7 @@ LANGUAGES = {
             'keyword': ['and', 'break', 'do', 'else', 'elseif', 'end', 'for',
                         'function', 'goto', 'if', 'in', 'local', 'not', 'or',
                         'repeat', 'return', 'then', 'until', 'while'],
-            'identifier' : ['[@_]&*'],
+            'identifier' : IDENTIFIER,
             'number' : ['#+', '#+\.#+'],
             'boolean': ['true', 'false'],
             'string' : ['".*"', "'.*'"],
@@ -192,10 +201,10 @@ LANGUAGES = {
             'operator': ['=', '==', '~=', r'\+', r'\*', '-', '/', '%', '^',
                          '<', '<=', '>', '>=', r'\.\.', r'\#', ':'],
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'line_comment': ['--.+\n', '--.+$'],
+            'line_comment': ['--.*\n', '--.*$'],
             'newline' : ['\n'],
             'blank': [' +'],
-            'wrong_int' : ['#+@+&+'],
+            'wrong_int' : WRONG_INT,
             'special': ['ipairs', 'pairs', '\?', 'print'], # ? is here for demonstration only
         },
         # Special
@@ -209,20 +218,20 @@ LANGUAGES = {
                      'continue', 'lambda', 'try', 'as', 'def', 'from', 'while',
                      'nonlocal', 'assert', 'del', 'global', 'not', 'with', 'if',
                      'async', 'elif', 'or', 'yield'],
-            'identifier' : ['[@_]&*'],
+            'identifier' : IDENTIFIER,
             'integer' : ['#+'],
             'boolean' : ['True', 'False'],
             'string' : ['".*"', "'.*'"],
             'nil': ['None'],
             'operator': [r'\+', '/', '//', '&', '^', '~', '|', r'\*\*', '<<', '%', r'\*',
                       '-', '>>', ':', '<', '<=', '==', '!=', '>=', '>', r'\+=',
-                      '&=', '//=', '<<=', '%=', '\*=', '|=', r'\*\*=', '>>=', '-=',
+                      '\&=', '//=', '<<=', '%=', '\*=', '|=', r'\*\*=', '>>=', '-=',
                       '/=', '^=', '\.', '='],
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'line_comment': ['\#.+\n', '\#.+$'],
+            'line_comment': ['\#.*\n', '\#.*$'],
             'newline' : ['\n'],
             'blank': [' +'],
-            'wrong_int' : ['#+@+&+'],
+            'wrong_int' : WRONG_INT,
             'special': ['print'],
         },
         # Special

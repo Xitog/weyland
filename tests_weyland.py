@@ -36,7 +36,7 @@
 # Import
 #-------------------------------------------------------------------------------
 
-from weyland import Rex
+from weyland import Regex
 from weyland import Lexer, LANGUAGES, Language, __version__
 from collections import namedtuple
 from datetime import datetime
@@ -45,16 +45,17 @@ from datetime import datetime
 # Constants
 #-------------------------------------------------------------------------------
 
-TEST_REGEX    = False
-TEST_LEXER    = False
-TEST_FUNK     = False
+TEST_REGEX    = True
+TEST_LEXER    = True
+TEST_FUNK     = True
 TEST_ASH      = True
-TEST_BNF      = False
-TEST_BNF_MINI = False
-TEST_PYTHON   = False
-TEST_GAME     = False
+TEST_BNF      = True
+TEST_BNF_MINI = True
+TEST_PYTHON   = True
+TEST_GAME     = True
 
 DEBUG = False
+STOP_ON_BAD = True
 
 ID  = 'identifier'
 KW  = 'keyword'
@@ -77,7 +78,7 @@ Bad   = 0
 # Types
 #-------------------------------------------------------------------------------
 
-RexTest = namedtuple('Test', ['regex', 'length', 'candidate', 'expected'])
+RegexTest = namedtuple('Test', ['regex', 'length', 'candidate', 'expected'])
 TestLexer = namedtuple('Test', ['text', 'language', 'nb'])
 
 #-------------------------------------------------------------------------------
@@ -125,7 +126,7 @@ def test_regex(debug=False):
             regex = None
             msg = None
             try:
-                regex = Rex(t.regex, debug)
+                regex = Regex(t.regex, debug)
             except Exception as e:
                 msg = e
             end = '\n' if debug else ''
@@ -155,106 +156,120 @@ def test_regex(debug=False):
             res_str = 'ERROR'
             color = 'COMMENT'
             Bad += 1
-        xprint(f'   {res_str} expected {t.expected} and found {res}', color)
+        if debug:
+            print('    Debug match (Match#info):')
+            res.info('        ')
+        print()
+        print('    Result:')
+        xprint(f'        {res_str} expected {t.expected} and found {res}', color)
         previous = t.regex
+        if res_str == 'ERROR' and STOP_ON_BAD:
+            exit()
 
 #-------------------------------------------------------------------------------
 # Tests of Regex
 #-------------------------------------------------------------------------------
 
-# RexText : a rex, number of elements of the rex, test string, result
+# RegexText : a regex, number of elements of the regex, test string, result
 
 test_library = {
 
-      1: RexTest("'.*'", 3, "'Je suis un zorba'", Check("'Je suis un zorba'")),
+      1: RegexTest("'.*'", 3, "'Je suis un zorba'", Check("'Je suis un zorba'")),
     
-    100: RexTest("abc", 3, "zor", Check('', 'zor')),
-    101: RexTest("abc", 3, "ab", Check('ab', '...')),
-    102: RexTest("abc", 3, "abc", Check('abc')),
-    103: RexTest("abc", 3, "abcd", Check('abc', 'd')),
+    100: RegexTest("abc", 3, "zor", Check('', 'zor')),
+    101: RegexTest("abc", 3, "ab", Check('ab', '...')),
+    102: RegexTest("abc", 3, "abc", Check('abc')),
+    103: RegexTest("abc", 3, "abcd", Check('abc', 'd')),
 
-    110: RexTest("@", 1, "5", Check()),
-    111: RexTest("@", 1, "a", Check('a')),
-    112: RexTest("@", 1, "ab", Check('a', 'b')),
+    110: RegexTest("@", 1, "5", Check()),
+    111: RegexTest("\\a", 1, "5", Check()),
+    112: RegexTest("@", 1, "a", Check('a')),
+    113: RegexTest("\\a", 1, "a", Check('a')),
+    114: RegexTest("@", 1, "ab", Check('a', 'b')),
+    115: RegexTest("\\a", 1, "ab", Check('a', 'b')),
+    116: RegexTest(r"\a", 1, "ab", Check('a', 'b')),
 
-    150: RexTest("a@+", 2, "a5", Check()),
-    151: RexTest("a@+", 2, "a", Check('a', '...')), # partial match
-    152: RexTest("a@+", 2, "ab", Check('ab')),
-    153: RexTest("a@+", 2, "abc", Check('abc')),
+    150: RegexTest("a@+", 2, "a5", Check()),
+    151: RegexTest("a@+", 2, "a", Check('a', '...')), # partial match
+    152: RegexTest("a@+", 2, "ab", Check('ab')),
+    153: RegexTest("a@+", 2, "abc", Check('abc')),
 
-    154: RexTest("a@*", 2, "a5", Check('a', '5')),
-    155: RexTest("a@*", 2, "a", Check('a')),
-    156: RexTest("a@*", 2, "ab", Check('ab')),
-    157: RexTest("a@*", 2, "abc", Check('abc')),
+    154: RegexTest("a@*", 2, "a5", Check('a', '5')),
+    155: RegexTest("a@*", 2, "a", Check('a')),
+    156: RegexTest("a@*", 2, "ab", Check('ab')),
+    157: RegexTest("a@*", 2, "abc", Check('abc')),
 
-    200: RexTest("#", 1, "a", Check()),
-    201: RexTest("#", 1, "1", Check('1')),
-    202: RexTest("#", 1, "15", Check('1', '5')),
-
-    220: RexTest("##", 2, "aa", Check()),
-    221: RexTest("##", 2, "a5", Check()),
-    222: RexTest("##", 2, "1", Check('1', '...')),
-    223: RexTest("##", 2, "1a", Check('', '1a')),
-    224: RexTest("##", 2, "15", Check('15')),
-    225: RexTest("##", 2, "158", Check('15', '8')),
+    200: RegexTest("#", 1, "a", Check()),
+    201: RegexTest("\d", 1, "a", Check()),
+    202: RegexTest("#", 1, "1", Check('1')),
+    203: RegexTest("\d", 1, "1", Check('1')),
+    204: RegexTest("#", 1, "15", Check('1', '5')),
+    205: RegexTest("\d", 1, "15", Check('1', '5')),
     
-    230: RexTest("##?", 2, "a", Check()),
-    231: RexTest("##?", 2, "1", Check('1')),
-    232: RexTest("##?", 2, "15", Check('15')),
-    233: RexTest("##?", 2, "158", Check('15', '8')),
+    220: RegexTest("##", 2, "aa", Check()),
+    221: RegexTest("##", 2, "a5", Check()),
+    222: RegexTest("##", 2, "1", Check('1', '...')),
+    223: RegexTest("##", 2, "1a", Check('', '1a')),
+    224: RegexTest("##", 2, "15", Check('15')),
+    225: RegexTest("##", 2, "158", Check('15', '8')),
+    
+    230: RegexTest("##?", 2, "a", Check()),
+    231: RegexTest("##?", 2, "1", Check('1')),
+    232: RegexTest("##?", 2, "15", Check('15')),
+    233: RegexTest("##?", 2, "158", Check('15', '8')),
 
-    240: RexTest("##+", 2, "a", Check()),
-    241: RexTest("##+", 2, "ab", Check()),
-    242: RexTest("##+", 2, "1", Check('1', '...')),
-    243: RexTest("##+", 2, "1a", Check('', '1a')), # ce n'est pas bon, ni partial !
-    244: RexTest("##+", 2, "15", Check('15')),
-    245: RexTest("##+", 2, "158", Check('158')),
+    240: RegexTest("##+", 2, "a", Check()),
+    241: RegexTest("##+", 2, "ab", Check()),
+    242: RegexTest("##+", 2, "1", Check('1', '...')),
+    243: RegexTest("##+", 2, "1a", Check('', '1a')), # ce n'est pas bon, ni partial !
+    244: RegexTest("##+", 2, "15", Check('15')),
+    245: RegexTest("##+", 2, "158", Check('158')),
 
-    500: RexTest("a\?", 2, "b", Check()),
-    501: RexTest("a\?", 2, "a", Check('a', '...')),
-    502: RexTest("a\?", 2, "a?", Check('a?')),
-    503: RexTest("a\?", 2, "ab", Check('', 'ab')),
-    504: RexTest("a\?", 2, "a?b", Check('a?', 'b')),
+    500: RegexTest("a\?", 2, "b", Check()),
+    501: RegexTest("a\?", 2, "a", Check('a', '...')),
+    502: RegexTest("a\?", 2, "a?", Check('a?')),
+    503: RegexTest("a\?", 2, "ab", Check('', 'ab')),
+    504: RegexTest("a\?", 2, "a?b", Check('a?', 'b')),
 
-    510: RexTest("a\\\\", 2, "b", Check()),
-    511: RexTest("a\\\\", 2, "a", Check('a', '...')),
-    512: RexTest("a\\\\", 2, "a\\", Check('a\\')),
-    513: RexTest("a\\\\", 2, "ab", Check('', 'ab')),
-    514: RexTest("a\\\\", 2, "a\\b", Check('a\\', 'b')),
+    510: RegexTest("a\\\\", 2, "b", Check()),
+    511: RegexTest("a\\\\", 2, "a", Check('a', '...')),
+    512: RegexTest("a\\\\", 2, "a\\", Check('a\\')),
+    513: RegexTest("a\\\\", 2, "ab", Check('', 'ab')),
+    514: RegexTest("a\\\\", 2, "a\\b", Check('a\\', 'b')),
 
     # Test of the "&" special char
-    600: RexTest("&", 1, "a", Check('a')),
-    601: RexTest("&", 1, "1", Check('1')),
-    602: RexTest("&*", 1, "abc255", Check('abc255')),
+    600: RegexTest("&", 1, "a", Check('a')),
+    601: RegexTest("&", 1, "1", Check('1')),
+    602: RegexTest("&*", 1, "abc255", Check('abc255')),
 
     # Test of position
-    700: RexTest("hello", 5, "hello world", Check('hello', ' world')),
-    701: RexTest("hello$", 5, "hello world", Check()),
-    702: RexTest("hello$", 5, "hello", Check('hello')),
+    700: RegexTest("hello", 5, "hello world", Check('hello', ' world')),
+    701: RegexTest("hello$", 5, "hello world", Check()),
+    702: RegexTest("hello$", 5, "hello", Check('hello')),
     
-    703: RexTest("\#.*", 2, "# comment\n", Check('# comment', '\n')),
-    704: RexTest("\#.*", 2, "# comment", Check('# comment')),
-    705: RexTest("\#.*\n", 3, "# comment", Check('# comment', '...')),
-    706: RexTest("\#.*$", 2, "# comment", Check('# comment')),
+    703: RegexTest("\#.*", 2, "# comment\n", Check('# comment', '\n')),
+    704: RegexTest("\#.*", 2, "# comment", Check('# comment')),
+    705: RegexTest("\#.*\n", 3, "# comment", Check('# comment', '...')),
+    706: RegexTest("\#.*$", 2, "# comment", Check('# comment')),
 
-    1000: RexTest("[ab]", 1, "c", Check()),
-    1001: RexTest("[ab]", 1, "a", Check('a')),
-    1002: RexTest("[ab]", 1, "b", Check('b')),
-    1003: RexTest("[ab]", 1, "ac", Check('a', 'c')),
-    1004: RexTest("[ab]c", 2, "ab", Check('', 'ab')),
-    1005: RexTest("[ab]c", 2, "ac", Check('ac')),
+    1000: RegexTest("[ab]", 1, "c", Check()),
+    1001: RegexTest("[ab]", 1, "a", Check('a')),
+    1002: RegexTest("[ab]", 1, "b", Check('b')),
+    1003: RegexTest("[ab]", 1, "ac", Check('a', 'c')),
+    1004: RegexTest("[ab]c", 2, "ab", Check('', 'ab')),
+    1005: RegexTest("[ab]c", 2, "ac", Check('ac')),
     
-    5000: RexTest(r"[@_]&*[\?!]?", 3, "_a15", Check('_a15')),
-    5001: RexTest(r"[@_]&*[\?!]?", 3, "4a", Check()),
-    5002: RexTest(r"[@_]&*[\?!]?", 3, "_isalpha?", Check('_isalpha?')),
+    5000: RegexTest(r"[@_]&*[\?!]?", 3, "_a15", Check('_a15')),
+    5001: RegexTest(r"[@_]&*[\?!]?", 3, "4a", Check()),
+    5002: RegexTest(r"[@_]&*[\?!]?", 3, "_isalpha?", Check('_isalpha?')),
 
-    9000: RexTest("#?#", None, None, None),
-    9001: RexTest("#?1", None, None, None),
+    9000: RegexTest("#?#", None, None, None),
+    9001: RegexTest("#?1", None, None, None),
 
-    10000: RexTest(".", 1, " ", Check(' ')),
-    10001: RexTest(".", 1, "a", Check('a')),
-    10002: RexTest(".", 1, "5", Check('5')),
-    10003: RexTest(".", 1, ">", Check('>')),
+    10000: RegexTest(".", 1, " ", Check(' ')),
+    10001: RegexTest(".", 1, "a", Check('a')),
+    10002: RegexTest(".", 1, "5", Check('5')),
+    10003: RegexTest(".", 1, ">", Check('>')),
     
     #100: Test(r"[@_]\w*", 2, 1, "_a15", COMPLETE),
     #327: Test(r"\d\d?\d", 3, 2, "123", COMPLETE), # pb
@@ -266,14 +281,15 @@ start = datetime.now()
 if TEST_REGEX:
     tests = test_library.keys()
     #tests = [706] #[223]
+    print('Testing', len(tests), 'regex.')
     if len(tests) < 10:
         test_regex(True)
     else:
         test_regex(False)
 
     # Independant test (uncounted)
-    #rex = Rex('aaa')
-    #res = rex.match('aaa')
+    #regex = Regex('aaa')
+    #res = regex.match('aaa')
     #xprint(res, 'STRING')
 
 #-------------------------------------------------------------------------------
@@ -290,12 +306,12 @@ if TEST_LEXER:
 
     test_one = Language('test_one', {
                     'KEYWORD' : ['bonjour', 'bon'],
-                    'IDENTIFIER' : ['[@_]$*'],
+                    'IDENTIFIER' : ['[@_]&*'],
                     'SPECIFIC_INTEGER' : ['08789'],
                     'ALL_INTEGER' : ['#+'],
                     'OPERATOR' : ['\+', '\+='],
                     'NEWLINE' : ['\n'],
-                    'WRONGINT' : ['#+@+$+'],
+                    'WRONGINT' : ['#+@&+'],
                     'SPACE': [' '],
                 })
 
