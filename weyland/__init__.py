@@ -27,7 +27,7 @@
 """Weyland: provides an alternative way to write regular expression (regex) and a lexer using them."""
 
 # Version of the weyland package
-__version__ = "0.0.9"
+__version__ = "0.1.0"
 
 # Imports
 import logging

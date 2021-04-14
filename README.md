@@ -6,9 +6,11 @@ Install with: ``pip install weyland``
 
 ## A. Syntax of regular expression
 
-In Weyland, we call regular expression **rex** instead of *regex* to differenciate them.
+Weyland offers three classes: **Regex** for regexes, **Match** for matches and **Element**.
 
-This is a short definition of the language used to define them.
+A *Regex* is composed of *Element*s.
+
+Below is a short definition of the language used to define Regex.
 
 ### A.1 Sequence
 
@@ -18,17 +20,17 @@ This is a short definition of the language used to define them.
 
 A class is a group of characters represented by a single special character.
 
-* ``#`` any digits (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-* ``@`` any letters
-* ``&`` any digits, letters and the underscore character (_)
+* ``#`` or ``\d`` any digits (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+* ``@`` or ``\a`` any letters
+* ``&`` or ``\w`` any digits, letters and the underscore character (_)
 * ``.`` any characters which is not a new line
 
 ### A.3 Positions
 
 A position can be also represented by a single special character.
 
-* ``^`` start of string or line
-* ``$`` end of string or line
+* ``^`` start of the string (can be used only at the start of the Regex)
+* ``$`` end of the string (can be used only at the end of the Regex)
 
 ### A.4 Choices
 
@@ -46,7 +48,7 @@ Optionality and repetition can't be used for positions.
 
 ### A.6 Escaping special characters
 
-In order to use a special characters as a normal character in a rex, you must escape them by putting the (\) character before it.
+In order to use a special characters as a normal character in a regex, you must escape them by putting the (\) character before it.
 
 There are 12 escapable characters: #, @, &, ., ^, $, [, ], ?, +, *, \.
 
@@ -54,12 +56,12 @@ There are 12 escapable characters: #, @, &, ., ^, $, [, ], ?, +, *, \.
 
 * In a choice, **you can only choose between one element** not between sequences,
 * In a choice, **no repeated element nor optionnal element**.
-* You can only use terminals and special characters in rex definitions.
-* You can't define groups in rex definitions.
+* You can only use terminals and special characters in regex definitions.
+* You can't define groups in regex definitions.
 
 ## B. Lexers
 
-Weyland provides also several lexers using the incomplete matching feature of Weyland's rex.
+Weyland provides also several lexers using the incomplete matching feature of Weyland's regex.
 
 ### B.1 Languages available
 
