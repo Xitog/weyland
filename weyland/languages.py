@@ -45,8 +45,13 @@ class Language:
 #-------------------------------------------------------------------------------
 
 # Shared definitions
-IDENTIFIER = ['[@_]&*']
-WRONG_INT = ['#+@&*']
+IDENTIFIER   = ['[@_]&*']
+WRONG_INT    = ['#+@&*']
+INTEGER      = ['#+']
+INTEGER_HEXA = ['0[xX][#ABCDEFabcdef]+']
+INTEGER_SEP  = ['#+[#_]*#+']
+INTEGER_BIN  = ['0[bB][01]+']
+FLOAT        = ['#+\.#+', '#+[eE]-?#+', '#+\.#+[eE]-?#+']
 
 # Languages
 #   text
@@ -219,14 +224,15 @@ LANGUAGES = {
                      'nonlocal', 'assert', 'del', 'global', 'not', 'with', 'if',
                      'async', 'elif', 'or', 'yield'],
             'identifier' : IDENTIFIER,
-            'integer' : ['#+'],
+            'integer' : INTEGER + INTEGER_HEXA + INTEGER_BIN,
+            'float' : FLOAT,
             'boolean' : ['True', 'False'],
             'string' : ['".*"', "'.*'"],
             'nil': ['None'],
-            'operator': [r'\+', '/', '//', '&', '^', '~', '|', r'\*\*', '<<', '%', r'\*',
+            'operator': [r'\+', '/', '//', '\&', '\^', '~', '|', r'\*\*', '<<', '%', r'\*',
                       '-', '>>', ':', '<', '<=', '==', '!=', '>=', '>', r'\+=',
                       '\&=', '//=', '<<=', '%=', '\*=', '|=', r'\*\*=', '>>=', '-=',
-                      '/=', '^=', '\.', '='],
+                      '/=', '\^=', '\.', '='],
             'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
             'line_comment': ['\#.*\n', '\#.*$'],
             'newline' : ['\n'],

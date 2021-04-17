@@ -54,17 +54,20 @@ TEST_BNF_MINI = True
 TEST_PYTHON   = True
 TEST_GAME     = True
 
-DEBUG = False
+DEBUG = True
 STOP_ON_BAD = True
 
 ID  = 'identifier'
 KW  = 'keyword'
 SEP = 'separator'
 INT = 'integer'
+FLT = 'float'
+OP  = 'operator'
 BIN = 'binary_operator'
 UNA = 'unary_operator'
 NL  = 'newline'
 STR = 'string'
+BLK = 'blank'
 
 #-------------------------------------------------------------------------------
 # Globals
@@ -115,6 +118,8 @@ def reg(r):
         Good += 1
     else:
         Bad += 1
+        if STOP_ON_BAD:
+            exit()
 
 def test_regex(debug=False):
     global Total, Good, Bad
@@ -491,12 +496,31 @@ if TEST_BNF_MINI:
 #-------------------------------------------------------------------------------
 
 if TEST_PYTHON:
-    
-    print('\nTests of python language')
+    print('-------------------------------------------------------------------')
+    print('Tests of python language')
+    print('-------------------------------------------------------------------\n')
     lex = Lexer(LANGUAGES['python'], debug=DEBUG)
+    
+    # integer
     reg(lex.check("Test 1999",
-              ['identifier', 'blank', 'integer'],
-              ['Test'  , ' '    , '1999']))
+              [ID      , BLK, INT],
+              ['Test'  , ' ', '1999']))
+    print()
+    reg(lex.check("a = 5",
+              [ID , BLK, OP , BLK, INT],
+              ['a', ' ', '=', ' ', '5']))
+    print()
+    reg(lex.check("a = 1.2",
+              [ID , BLK, OP , BLK, FLT],
+              ['a', ' ', '=', ' ', '1.2']))
+    print()
+    reg(lex.check("a = 0b01",
+              [ID , BLK, OP , BLK, INT],
+              ['a', ' ', '=', ' ', '0b01']))
+    print()
+    reg(lex.check("a = 0xFF",
+              [ID , BLK, OP , BLK, INT],
+              ['a', ' ', '=', ' ', '0xFF']))
 
 #-------------------------------------------------------------------------------
 # Tests for the game language
@@ -514,8 +538,9 @@ def check_html(lang, text, expected, raws=None):
     Good += 1
 
 if TEST_GAME:
-    
-    print('\nTests of game language')
+    print('\n-------------------------------------------------------------------')
+    print('Tests of game language')
+    print('-------------------------------------------------------------------\n')
     lex = Lexer(LANGUAGES['game'], debug=DEBUG)
     lex.info()
 
