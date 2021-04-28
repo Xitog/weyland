@@ -149,12 +149,13 @@ LANGUAGES = {
             'TYPE' : [':', '->'],
             'FAST' : ['=>'],
             'LABEL' : ['::'],
-            'unary_operator' : ['-', 'not', r'\#', '~'],
+            #'unary_operator' : ['-', 'not', r'\#', '~'],
             # New
             'integer' : [r'#+'],
             'boolean' : ['false', 'true'],
             'nil': ['nil'],
-            'binary_operator' : ['and', 'or', # boolean
+            #'binary_operator' : ['and', 'or', # boolean
+            'operator' : ['-', 'not', r'\#', '~', 'and', 'or', # boolean
                   'in', # belongs to
                   r'\+', '-', r'\*', '/', '//', r'\*\*', '%', # mathematical
                   '\&', '|', '~', '>>', '<<', # bitwise
