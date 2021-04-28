@@ -68,7 +68,7 @@ Weyland provides also several lexers using the incomplete matching feature of We
 A set of lexers and associated tokens are available for the following languages: 
 
 * Data language: json,
-* Programming languages: lua, python,
+* Programming languages: ash, lua, python,
 * Description languages: bnf, hamill.
 
 ## C. Websites

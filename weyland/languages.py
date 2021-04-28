@@ -152,6 +152,7 @@ LANGUAGES = {
             #'unary_operator' : ['-', 'not', r'\#', '~'],
             # New
             'integer' : [r'#+'],
+            'number' : FLOAT,
             'boolean' : ['false', 'true'],
             'nil': ['nil'],
             #'binary_operator' : ['and', 'or', # boolean
