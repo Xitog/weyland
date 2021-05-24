@@ -56,6 +56,7 @@ There are 12 escapable characters: #, @, &, ., ^, $, [, ], ?, +, *, \.
 
 * In a choice, **you can only choose between one element** not between sequences,
 * In a choice, **no repeated element nor optionnal element**.
+* In a choice, **no start or end of the string**.
 * You can only use terminals and special characters in regex definitions.
 * You can't define groups in regex definitions.
 
