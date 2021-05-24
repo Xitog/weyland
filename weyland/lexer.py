@@ -127,8 +127,11 @@ class Lexer:
         for i, t in enumerate(tokens):
             val = t.val if t.val != '\n' else '<NL>'
             if t.typ == typs[i] and t.val == vals[i]:
-                print(f'OK  {i:5d}. {t.typ:10s} |{val:s}|')
+                val_inf = val.replace('\n', '<NL>')
+                print(f'OK  {i:5d}. {t.typ:10s} |{val_inf:s}|')
             else:
+                val_err = val.replace('\n', '<NL>')
+                val_exp = vals[i].replace('\n', '<NL>')
                 print(f'ERROR   {i:5d}. {t.typ:10s} |{val:s}|')
                 print(f'EXPECTED {typs[i]:10s} |{vals[i]:s}|')
                 return False

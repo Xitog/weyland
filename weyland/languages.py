@@ -46,7 +46,7 @@ class Language:
 
 # Shared definitions
 IDENTIFIER   = ['[@_]&*']
-WRONG_INT    = ['#+@&*']
+WRONG_INT    = ['[123456789]#*@&*', '0[aAbCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWyYzZ]#*@&*', '00#*@&*']
 INTEGER      = ['#+']
 INTEGER_HEXA = ['0[xX][#ABCDEFabcdef]+']
 INTEGER_SEP  = ['#+[#_]*#+']
@@ -151,7 +151,7 @@ LANGUAGES = {
             'LABEL' : ['::'],
             #'unary_operator' : ['-', 'not', r'\#', '~'],
             # New
-            'integer' : [r'#+'],
+            'integer' : [r'#+'] + INTEGER_BIN + INTEGER_HEXA,
             'number' : FLOAT,
             'boolean' : ['false', 'true'],
             'nil': ['nil'],

@@ -150,10 +150,6 @@ class Element:
                 res = (candidate.isalnum() or candidate == '_')
             elif self.core == Element.ANY:
                 res = (candidate != '\n')
-            elif self.core == Element.START:
-                res = (candidate == 'START')
-            elif self.core == Element.END:
-                res = (candidate == 'END')
             else:
                 raise Exception(f'Unknown special char {self.elements[index].elem}')
         else:
@@ -222,6 +218,8 @@ class Regex:
                         sub_index += 2
                     elif c in Regex.MODIFIERS:
                         raise Exception("No modifiers ? + * in choice")
+                    elif c in ['^', '$']:
+                        raise Exception("No starting or ending element in choice")
                     else:
                         sub_index += 1
                     c = self.pattern[sub_index]
