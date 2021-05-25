@@ -361,11 +361,11 @@ class Match:
 
     def __init__(self, regex, text):
         self.regex           = regex  # Regex
-        self.text            = text     # Candidate text matching against the Regex
-        self.match           = False    # Matched or not?
-        self.partial         = False    # In case not matching, is it due to not enough chars?
-        self.length          = None     # Length of candidate text matched
-        self.element_matches = []       # Length of candidate text matched for each elements of the Regex
+        self.text            = text   # Candidate text matching against the Regex
+        self.match           = False  # Matched or not?
+        self.partial         = False  # In case not matching, is it due to not enough chars?
+        self.length          = None   # Length of candidate text matched
+        self.element_matches = []     # Length of candidate text matched for each elements of the Regex
 
     def __len__(self):
         return self.length
