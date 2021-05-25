@@ -133,7 +133,7 @@ class Lexer:
             else:
                 val_err = t.val.replace('\n', Lexer.REPLACE_NEWLINE)
                 val_exp = vals[i].replace('\n', Lexer.REPLACE_NEWLINE)
-                print(f'ERROR   {i:5d}. {t.typ:10s} |{val:s}|')
+                print(f'ERROR   {i:5d}. {t.typ:10s} |{val_err:s}|')
                 print(f'EXPECTED {typs[i]:10s} |{vals[i]:s}|')
                 return False
         return True
