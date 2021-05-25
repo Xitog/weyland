@@ -151,7 +151,7 @@ class Element:
             elif self.core == Element.ANY:
                 res = (candidate != '\n')
             else:
-                raise Exception(f'Unknown special char {self.elements[index].elem}')
+                raise Exception(f'Unknown special char {self.core}')
         else:
             res = (candidate == self.core)
         return res
@@ -372,7 +372,7 @@ class Match:
 
     def is_partial(self):
         """Not a match but the last char matched is the last char of the text"""
-        return not self.match and self.length == len(text)
+        return self.partial
 
     def is_match(self):
         return self.match
