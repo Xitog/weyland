@@ -76,6 +76,8 @@ class LexingException(Exception):
 
 class Lexer:
 
+    REPLACE_NEWLINE = '\\n'
+
     def __init__(self, lang, discards=None, debug=False):
         assert(isinstance(lang, Language))
         assert(discards is None or isinstance(discards, list))
@@ -125,13 +127,12 @@ class Lexer:
             return False
         print(f'Tokens: {len(tokens)}')
         for i, t in enumerate(tokens):
-            val = t.val if t.val != '\n' else '<NL>'
             if t.typ == typs[i] and t.val == vals[i]:
-                val_inf = val.replace('\n', '<NL>')
+                val_inf = t.val.replace('\n', Lexer.REPLACE_NEWLINE)
                 print(f'OK  {i:5d}. {t.typ:10s} |{val_inf:s}|')
             else:
-                val_err = val.replace('\n', '<NL>')
-                val_exp = vals[i].replace('\n', '<NL>')
+                val_err = t.val.replace('\n', Lexer.REPLACE_NEWLINE)
+                val_exp = vals[i].replace('\n', Lexer.REPLACE_NEWLINE)
                 print(f'ERROR   {i:5d}. {t.typ:10s} |{val:s}|')
                 print(f'EXPECTED {typs[i]:10s} |{vals[i]:s}|')
                 return False

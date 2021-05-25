@@ -218,7 +218,7 @@ class Regex:
                         sub_index += 2
                     elif c in Regex.MODIFIERS:
                         raise Exception("No modifiers ? + * in choice")
-                    elif c in ['^', '$']:
+                    elif c in Regex.POSITIONS:
                         raise Exception("No starting or ending element in choice")
                     else:
                         sub_index += 1
