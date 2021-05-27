@@ -150,12 +150,8 @@ class Element:
                 res = (candidate.isalnum() or candidate == '_')
             elif self.core == Element.ANY:
                 res = (candidate != '\n')
-            elif self.core == Element.START:
-                res = (candidate == 'START')
-            elif self.core == Element.END:
-                res = (candidate == 'END')
             else:
-                raise Exception(f'Unknown special char {self.elements[index].elem}')
+                raise Exception(f'Unknown special char {self.core}')
         else:
             res = (candidate == self.core)
         return res
@@ -222,6 +218,8 @@ class Regex:
                         sub_index += 2
                     elif c in Regex.MODIFIERS:
                         raise Exception("No modifiers ? + * in choice")
+                    elif c in Regex.POSITIONS:
+                        raise Exception("No starting or ending element in choice")
                     else:
                         sub_index += 1
                     c = self.pattern[sub_index]
@@ -363,18 +361,18 @@ class Match:
 
     def __init__(self, regex, text):
         self.regex           = regex  # Regex
-        self.text            = text     # Candidate text matching against the Regex
-        self.match           = False    # Matched or not?
-        self.partial         = False    # In case not matching, is it due to not enough chars?
-        self.length          = None     # Length of candidate text matched
-        self.element_matches = []       # Length of candidate text matched for each elements of the Regex
+        self.text            = text   # Candidate text matching against the Regex
+        self.match           = False  # Matched or not?
+        self.partial         = False  # In case not matching, is it due to not enough chars?
+        self.length          = None   # Length of candidate text matched
+        self.element_matches = []     # Length of candidate text matched for each elements of the Regex
 
     def __len__(self):
         return self.length
 
     def is_partial(self):
         """Not a match but the last char matched is the last char of the text"""
-        return not self.match and self.length == len(text)
+        return self.partial
 
     def is_match(self):
         return self.match

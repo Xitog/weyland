@@ -1,7 +1,7 @@
 # -----------------------------------------------------------
 # MIT Licence (Expat License Wording)
 # -----------------------------------------------------------
-# Copyright © 2020, Damien Gouteux
+# Copyright © 2020-2021, Damien Gouteux
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -45,6 +45,7 @@ from datetime import datetime
 # Constants
 #-------------------------------------------------------------------------------
 
+# Test programs
 TEST_REGEX    = True
 TEST_LEXER    = True
 TEST_FUNK     = True
@@ -53,10 +54,13 @@ TEST_BNF      = True
 TEST_BNF_MINI = True
 TEST_PYTHON   = True
 TEST_GAME     = True
+TEST_LINE     = True
 
+# Global behaviour
 DEBUG = True
 STOP_ON_BAD = True
 
+# Shortcuts for testing results
 ID  = 'identifier'
 KW  = 'keyword'
 SEP = 'separator'
@@ -118,8 +122,8 @@ def reg(r):
         Good += 1
     else:
         Bad += 1
-        if STOP_ON_BAD:
-            exit()
+        #if STOP_ON_BAD:
+        raise Exception("Error")
 
 def test_regex(debug=False):
     global Total, Good, Bad
@@ -161,6 +165,7 @@ def test_regex(debug=False):
             res_str = 'ERROR'
             color = 'COMMENT'
             Bad += 1
+            raise Exception('error')
         if debug:
             print('    Debug match (Match#info):')
             res.info('        ')
@@ -341,6 +346,7 @@ if TEST_LEXER:
         if len(tokens) != tst.nb:
             print(f'ERROR: Wrong number of tokens: {len(tokens)}, expected: {tst.nb}')
             Bad += 1
+            raise Exception('error')
         else:
             Good += 1
             print(f'OK')
@@ -397,7 +403,7 @@ if TEST_ASH:
     print("")
 
     reg(lex.check('for a, b in c do 5 end',
-              [KW   , ID , SEP, ID , BIN , ID , KW  ,  INT, KW],
+              [KW   , ID , SEP, ID , OP , ID , KW  ,  INT, KW],
               ['for', 'a', ',', 'b', 'in', 'c', 'do',  '5', 'end']))
 
     print("")
@@ -574,6 +580,34 @@ if TEST_GAME:
     check_html('bnf', '<bonjour>', '<span class="bnf-keyword">&lt;bonjour&gt;</span>')
 
     #lex.ignore([1, 'a'])
+
+#-------------------------------------------------------------------------------
+# Tests for the line language
+#-------------------------------------------------------------------------------
+
+if TEST_LINE:
+    print('\n-------------------------------------------------------------------')
+    print('Tests of line language')
+    print('-------------------------------------------------------------------\n')
+    line = Language('line', {'line': ['.*\n', '.*$']})
+    lex = Lexer(line, debug=DEBUG)
+    print()
+
+    reg(lex.check('test',
+              ['line'],
+              ['test']))
+    print()
+
+    reg(lex.check('alpha\nbeta',
+              ['line' , 'line'],
+              ['alpha\n', 'beta']))
+    print()
+
+    test = "Depuis six mille ans la guerre\nPlait aux peuples querelleurs,\nEt Dieu perd son temps à faire\nLes étoiles et les fleurs."
+    reg(lex.check(test,
+              ['line'                            , 'line'                            , 'line'                            , 'line'                      ],
+              ['Depuis six mille ans la guerre\n', 'Plait aux peuples querelleurs,\n', 'Et Dieu perd son temps à faire\n', 'Les étoiles et les fleurs.']))
+    print()
 
 #-------------------------------------------------------------------------------
 # Display results
