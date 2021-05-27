@@ -141,7 +141,7 @@ LANGUAGES = {
                  'break', 'next', 'return',
                  'var', 'fun', 'sub', 'get', 'set', 'class',
                  'import', 'from', 'as',
-                 'try', 'catch', 'finally', 'raise'],
+                 'try', 'catch', 'finally', 'raise', 'const'],
             'identifier' : IDENTIFIER,
             # Old
             'AFFECTATION' : ['='],
