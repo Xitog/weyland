@@ -175,6 +175,8 @@ class Regex:
         self.at_start = False
         self.at_end = False
         self.compile()
+        if len(self) == 0:
+            raise Exception("Impossible to have a 0 element regex")
 
     def __str__(self):
         if self.pattern != '\n':

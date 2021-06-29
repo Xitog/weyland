@@ -45,16 +45,19 @@ from datetime import datetime
 # Constants
 #-------------------------------------------------------------------------------
 
+DEFAULT       = True
+
 # Test programs
-TEST_REGEX    = True
-TEST_LEXER    = True
-TEST_FUNK     = True
-TEST_ASH      = True
-TEST_BNF      = True
-TEST_BNF_MINI = True
-TEST_PYTHON   = True
-TEST_GAME     = True
-TEST_LINE     = True
+TEST_REGEX    = DEFAULT
+TEST_LEXER    = DEFAULT
+TEST_FUNK     = DEFAULT
+TEST_ASH      = DEFAULT
+TEST_BNF      = DEFAULT
+TEST_BNF_MINI = DEFAULT
+TEST_LUA      = DEFAULT
+TEST_PYTHON   = DEFAULT
+TEST_GAME     = DEFAULT
+TEST_LINE     = DEFAULT
 
 # Global behaviour
 DEBUG = True
@@ -65,6 +68,7 @@ ID  = 'identifier'
 KW  = 'keyword'
 SEP = 'separator'
 INT = 'integer'
+NUM = 'number'
 FLT = 'float'
 OP  = 'operator'
 BIN = 'binary_operator'
@@ -496,6 +500,24 @@ if TEST_BNF_MINI:
     <float> ::= <integer> "." <after_dot_float>
     """
     #parser = Parser()
+
+#-------------------------------------------------------------------------------
+# Tests for the lua language
+#-------------------------------------------------------------------------------
+
+if TEST_LUA:
+    print('-------------------------------------------------------------------')
+    print('Tests of lua language')
+    print('-------------------------------------------------------------------\n')
+    lex = Lexer(LANGUAGES['lua'], debug=DEBUG)
+    reg(lex.check("a = 5",
+              [ID , BLK, OP , BLK, NUM],
+              ['a', ' ', '=', ' ', '5']))
+    print()
+    reg(lex.check("~=",
+                  [OP],
+                  ['~=']))
+    print()
 
 #-------------------------------------------------------------------------------
 # Tests for the python language
