@@ -45,7 +45,10 @@ from datetime import datetime
 # Constants
 #-------------------------------------------------------------------------------
 
-DEFAULT       = True
+# Test en direct et sinon fait tous les tests
+REPL          = True
+
+DEFAULT       = False
 
 # Test programs
 TEST_REGEX    = DEFAULT
@@ -179,6 +182,50 @@ def test_regex(debug=False):
         previous = t.regex
         if res_str == 'ERROR' and STOP_ON_BAD:
             exit()
+
+if REPL:
+    print("Read eval print loop of Weyland", __version__)
+    print("Commands : exit | filter | info | list | lex | set <lang> | <expression>")
+    cmd = ''
+    lang = 'text'
+    print("[INFO]  Lang set to", lang)
+    lex = True
+    lexer = Lexer(LANGUAGES[lang], debug=False)
+    print("[INFO]  Lex:", lex)
+    filter = False
+    print("[INFO]  Filter:", filter)
+    while cmd != 'exit':
+        cmd = input('weyland> ')
+        if cmd.startswith('set '):
+            arr = cmd.split(' ')
+            if len(arr) > 1:
+                new = arr[1]
+                if new in LANGUAGES:
+                    lang = new
+                    print('[INFO]  Language set to', lang)
+                    lexer = Lexer(LANGUAGES[lang], debug=False)
+                else:
+                    print('[ERROR] Language unknown:', new)
+                    print('[INFO]  Language is still:', lang)
+        elif cmd == 'list':
+            for i, l in enumerate(LANGUAGES):
+                print(f"{i+1}.", l)
+        elif cmd == 'info':
+            if lex and lexer is not None:
+                lexer.info()
+        elif cmd == 'filter':
+            filter = not filter
+        elif cmd == 'exit':
+            pass
+        else:
+            if lex and lexer is not None:
+                res = lexer.lex(cmd)
+                print("Num | Type       | Val             | 1st | lst | len")
+                for i, r in enumerate(res):
+                    if filter and r.typ == 'blank':
+                        continue
+                    print(f"{i+1:3d} | {r.typ:10} | {r.val:15} | {r.first:3d} | {r.last:3d} | {r.length:3d}")
+    exit()
 
 #-------------------------------------------------------------------------------
 # Tests of Regex
@@ -611,10 +658,8 @@ if TEST_LINE:
     print('\n-------------------------------------------------------------------')
     print('Tests of line language')
     print('-------------------------------------------------------------------\n')
-    line = Language('line', {'line': ['.*\n', '.*$']})
-    lex = Lexer(line, debug=DEBUG)
+    lex = Lexer(LANGUAGES['line'], debug=DEBUG)
     print()
-
     reg(lex.check('test',
               ['line'],
               ['test']))
@@ -625,7 +670,7 @@ if TEST_LINE:
               ['alpha\n', 'beta']))
     print()
 
-    test = "Depuis six mille ans la guerre\nPlait aux peuples querelleurs,\nEt Dieu perd son temps à faire\nLes étoiles et les fleurs."
+    test = "Depuis six mille ans la guerre\nPlait aux peuples querelleurs,\nEt Dieu perd son temps à faire\nLes étoiles et les fleurs." # Victor HUGO
     reg(lex.check(test,
               ['line'                            , 'line'                            , 'line'                            , 'line'                      ],
               ['Depuis six mille ans la guerre\n', 'Plait aux peuples querelleurs,\n', 'Et Dieu perd son temps à faire\n', 'Les étoiles et les fleurs.']))

@@ -61,6 +61,17 @@ FLOAT        = ['#+\.#+', '#+[eE]-?#+', '#+\.#+[eE]-?#+']
 #   ash, json, lua, python
 
 LANGUAGES = {
+    # Un langage qui divise simplement en lignes
+    'line': Language('line', {
+            'line': ['.*\n', '.*$']
+        }
+    ),
+    'fr': Language('fr', {
+            'word': ['@+'],
+            'punct': [',', '\.', ':', ';', '-', '(', ')', '!', '\?'],
+            'blank': [' ', '\n', '\t']
+        }
+    ),
     'text': Language('text', {
             'normal': ['.*'],
             'identifier': [],
