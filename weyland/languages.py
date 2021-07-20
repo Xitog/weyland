@@ -155,11 +155,11 @@ LANGUAGES = {
                  'try', 'catch', 'finally', 'raise', 'const'],
             'identifier' : IDENTIFIER,
             # Old
-            'AFFECTATION' : ['='],
-            'COMBINED_AFFECTATION' : [r'\+=', '-=', r'\*=', '/=', '//=', r'\*\*=', '%='],
-            'TYPE' : [':', '->'],
-            'FAST' : ['=>'],
-            'LABEL' : ['::'],
+            'affectation' : ['='],
+            'combined_affectation' : [r'\+=', '-=', r'\*=', '/=', '//=', r'\*\*=', '%='],
+            'type' : [':', '->'],
+            'fast' : ['=>'],
+            'label' : ['::'],
             #'unary_operator' : ['-', 'not', r'\#', '~'],
             # New
             'integer' : [r'#+'] + INTEGER_BIN + INTEGER_HEXA,
@@ -182,7 +182,7 @@ LANGUAGES = {
         },
         # Special
         {
-            'ante_identifier': ['def', 'class'],
+            'ante_identifier': ['var', 'const', 'function', 'procedure', 'fun', 'pro', 'class', 'module'],
         }
     ),
     'json': Language('json', {
