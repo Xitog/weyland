@@ -69,6 +69,9 @@ class Token:
     def __len__(self):
         return self.length
 
+    def __eq__(self, o):
+        return type(o) == Token and self.typ == o.typ and self.val == o.val and self.first == o.first
+
 
 class LexingException(Exception):
     pass
