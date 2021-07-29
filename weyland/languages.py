@@ -52,6 +52,7 @@ INTEGER_HEXA = ['0[xX][#ABCDEFabcdef]+']
 INTEGER_SEP  = ['#+[#_]*#+']
 INTEGER_BIN  = ['0[bB][01]+']
 FLOAT        = ['#+\.#+', '#+[eE]-?#+', '#+\.#+[eE]-?#+']
+STRING       = ['"[^"]*"', "'[^']*'"] # pb : can't escape \" and \'
 
 # Languages
 #   text
@@ -178,7 +179,7 @@ LANGUAGES = {
             'blank': [' +'],
             'newline' : ['\n'],
             'line_comment': ['--.*\n', '--.*$'],
-            'string' : ['"[@#_\.- <>:=,;|\']*"', "'[@#_\.- <>:=,;|\"]*'"],
+            'string' : STRING,
         },
         # Special
         {

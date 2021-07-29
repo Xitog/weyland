@@ -185,8 +185,9 @@ def test_regex(debug=False):
 
 if REPL:
     print("Read eval print loop of Weyland", __version__)
-    print("Commands : exit | filter | info | list | lex | set <lang> | <expression>")
+    print("Commands : exit | filter | info | list | lex | set <lang> | <expression> | regex | match")
     cmd = ''
+    regex = None
     lang = 'text'
     print("[INFO]  Lang set to", lang)
     lex = True
@@ -217,6 +218,20 @@ if REPL:
             filter = not filter
         elif cmd == 'exit':
             pass
+        elif cmd.startswith('regex ') or cmd == 'regex':
+            arg = cmd[len('regex'):].strip()
+            if len(arg) == 0:
+                if regex is not None:
+                    print('[INFO]  Current regex is :', regex)
+                else:
+                    print('[INFO]  No regex defined')
+            else:
+                regex = Regex(arg)
+                print('[INFO]  New regex defined:', regex)
+        elif cmd.startswith('match '):
+            arg = cmd[len('match '):].strip()
+            res = regex.match(arg)
+            print('[INFO]  Result:', res)
         else:
             if lex and lexer is not None:
                 res = lexer.lex(cmd)

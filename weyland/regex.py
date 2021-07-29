@@ -67,11 +67,12 @@ class Element:
     START = '^'
     END   = '$'
     
-    def __init__(self, core, option=False, repeat=False, special=False):
+    def __init__(self, core, option=False, repeat=False, special=False, inverted=False):
         self.option = option
         self.repeat = repeat
         self.special = special
         self.core = core
+        self.inverted = inverted # for [^abc] not abc !
 
     def __str__(self):
         core = self.core if self.core != '\n' else '\\n'
@@ -141,6 +142,8 @@ class Element:
                 res = sub_elem.check(candidate)
                 if res:
                     break
+            if self.inverted:
+                res = not res
         elif self.special:
             if self.core == Element.DIGIT:   # \d
                 res = candidate.isdigit()
@@ -190,28 +193,34 @@ class Regex:
         else:
             return f"Regex |{self.repr_pattern}|"
     
-    def compile(self, start=0, limit=None):
+    def compile(self, start=0, limit=None, special_character=True):
         index = start
         if limit is None:
             limit = len(self.pattern)
         while index < limit:
             c = self.pattern[index]
-            if c == '^':
+            if c == '^' and special_character:
                 if index != 0:
-                    raise Exception("^ can only be at the start of a pattern")
-                else:
-                    self.at_start = True
+                    raise Exception("^ can only be at the start of a pattern or after a [")
+                self.at_start = True
                 index += 1
-            elif c == '$':
+            elif c == '$' and special_character:
                 if index != len(self.pattern) - 1:
                     raise Exception("$ can only be at the end of a pattern")
-                else:
-                    self.at_end = True
+                self.at_end = True
                 index += 1
             elif c == '[': # choice
                 sub_index = index + 1
+                inverted = False
+                start_at = 1
                 if sub_index >= len(self.pattern):
                     raise Exception(f"No [ at the end of a regex: |{self.repr_pattern}|")
+                elif self.pattern[sub_index] == '^':
+                    inverted = True
+                    sub_index += 1
+                    start_at += 1
+                    if sub_index >= len(self.pattern):
+                        raise Exception(f"No closing ] for regex: |{self.repr_pattern}|")
                 c = self.pattern[sub_index]
                 while c != ']' and sub_index < limit:
                     if c == '[': # no choice allowed in choice
@@ -229,14 +238,14 @@ class Regex:
                     raise Exception("Uncomplete choice: opening [ has not matching closing ]")
                 old = self.elements
                 self.elements = []
-                self.compile(start=index + 1, limit=sub_index)
-                if len(self.elements) < 2:
+                self.compile(start=index + start_at, limit=sub_index, special_character=False)
+                if len(self.elements) < 2 and not inverted:
                     raise Exception("Choice with one or zero element: not a choice")
                 sub_elems = self.elements
                 self.elements = old
-                self.elements.append(Element(sub_elems))
+                self.elements.append(Element(sub_elems, inverted=inverted))
                 index = sub_index + 1
-            elif c in Regex.MODIFIERS:
+            elif c in Regex.MODIFIERS and special_character:
                 if index == 0:
                     raise Exception(f'{c} without something to repeat in {self.repr_pattern}. Did you miss to escape?')
                 if c == '?':
@@ -267,7 +276,7 @@ class Regex:
                     special = True
                 self.elements.append(Element(cnext, special=special))
                 index += 2
-            elif c in Regex.CLASSES or c in Regex.POSITIONS:
+            elif (c in Regex.CLASSES or c in Regex.POSITIONS) and special_character:
                 self.elements.append(Element(c, special=True))
                 index += 1
             else:
