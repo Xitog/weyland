@@ -5,9 +5,20 @@
         <script>
             window.onload = start;
         </script>
+        <link href="https://fonts.googleapis.com/css?family=Fira+Sans" rel="stylesheet">
+        <style>
+            pre {
+                margin: 1em;
+                border: 1px solid darkgray;
+                background-color: lightgray;
+                font-family: 'Fira Sans', sans-serif;
+                padding: 1em;
+            }
+        </style>
     </head>
     <body>
         <input type="text" id="code" name="code" placeholder="Code..." onsubmit="react()">
         <input type="submit" hidden />
+        <pre id="output"> </pre>
     </body>
 </html>
