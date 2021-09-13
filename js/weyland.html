@@ -7,6 +7,12 @@
         </script>
         <link href="https://fonts.googleapis.com/css?family=Fira+Sans" rel="stylesheet">
         <style>
+            #main {
+                text-align: center;
+            }
+            #code {
+                width: 60%;
+            }
             pre {
                 margin: 1em;
                 border: 1px solid darkgray;
@@ -17,8 +23,10 @@
         </style>
     </head>
     <body>
-        <input type="text" id="code" name="code" placeholder="Code..." onsubmit="react()">
-        <input type="submit" hidden />
-        <pre id="output"> </pre>
+        <div id="main">
+            <input type="text" id="code" name="code" placeholder="Code..." onsubmit="react()">
+            <input type="submit" hidden />
+            <pre id="output"> </pre>
+        </div>
     </body>
 </html>

@@ -55,7 +55,7 @@ class Element
         {
             s += "!";
         }
-        let v = this.core === "\n" ? "<NL>" : this.core;
+        let v = this.core.replace("\n", Element.NewLineCode);
         return "<" + s + " |" + v + "| {" + this.min + ", " + this.max + "}>";
     }
 
@@ -172,26 +172,39 @@ class Regex
 
     toString()
     {
-
+        // Dummy
+        return '<Regex |' + this.repr_pattern + '|>';
     }
 
     compile()
     {
-
+        // Dummy
+        for (let c in this.pattern)
+        {
+            this.elements.push(new Element(c));
+        }
     }
 
-    check_at()
+    check_at(candidate, index)
     {
-
+        if (index >= this.elements.length)
+        {
+            throw new Exception('Index ' + index + ' out of range of Regex (' + this.elements.length + ')')
+        }
+        return this.elements[index].check(candidate);
     }
 
-    // Index ?
+    // Pas de surcharge de [ ] en JavaScript
     get(index)
     {
-
+        return this.elements[index];
     }
 
-    // Length ?
+    // Pas de surchage de length en JavaScript
+    size()
+    {
+        return this.elements.length
+    }
 
     info()
     {
@@ -205,14 +218,68 @@ class Regex
 
     match(candidate)
     {
+        if (this.debug)
+        {
+            console.log('    Regex#match ' + this.toString() + ' vs |' + candidate + '|');
+        }
+        let matched = Array(this.elements.length).fill(0);
+        let index_candidate = 0;
+        let index_regex = 0;
+        let final = new Match(this, candidate);
+        let res = true;
+        while (index_candidate < candidate.length && index_regex < this.elements.length)
+        {
+            let elem = this.elements[index_regex];
+            res = this.check_at(candidate[index_candidate], index_regex)
+            if (this.debug)
+            {
+                console.log('        iter index_candidate=' + index_candidate + '/' + (candidate.length - 1) + 
+                                        ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
+                                        ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res)
+            }
+            if (res)
+            {
+                if (elem.is_repeatable())
+                {
 
+                } else {
+                    matched[index_regex] += 1;
+                    index_regex += 1;
+                }
+            } else {
+                if (elem.is_optionnal() || matched[index_regex] > 0) // ?/* or (+ and 
+                {
+                    index_regex += 1
+                } else {
+                    break;
+                }
+            }
+        }
+        // Get last none empty
+        let count = 0;
+        for (let i=0; i < matched.length; i++)
+        {
+            count += matched[i];
+            if (matched[i] === 0 && !this.elements[i].is_optionnal())
+            {
+                res = false;
+            }
+        }
+        // at_start is not tested because match search only at the start of the string
+        // this test is only valid because match search only at the start of the string
     }
 }
 
 class Match
 {
+    constructor(regex, text)
+    {
 
+    }
 }
 
 var e = new Element('a');
 console.log(e.toString());
+var r = new Regex('abc');
+console.log(r.toString());
+console.log(r.match('abc'));

@@ -318,7 +318,7 @@ class Regex:
         index_candidate = 0
         index_regex = 0
         final = Match(self, candidate)
-        previous = False
+        res = True
         while index_candidate < len(candidate) and index_regex < len(self):
             elem = self.elements[index_regex]
             res = self.check_at(candidate[index_candidate], index_regex)
@@ -342,12 +342,9 @@ class Regex:
                 else:
                     break
         # Get last none empty
-        res = True
         count = 0
         for i, c in enumerate(matched):
-            count += matched[i]
-            if self.debug:
-                cnd = candidate[i:i+matched[i]]
+            count += c
             if c == 0 and not self.elements[i].is_optionnal():
                 res = False
         # at_start is not tested because match search only at the start of the string
