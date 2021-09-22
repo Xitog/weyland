@@ -390,10 +390,7 @@ class Match:
 
     def is_overload(self):
         """There is some text after"""
-        if self.length is not None and self.length < len(self.text):
-            return True
-        else:
-            return False
+        return (self.length is not None and self.length < len(self.text))
 
     def get_overload(self):
         if self.length is None or self.length == len(self.text):

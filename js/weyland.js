@@ -274,7 +274,78 @@ class Match
 {
     constructor(regex, text)
     {
+        this.regex = regex;         // Regex
+        this.text = text;           // Candidate
+        this.match = false;         // Matched or not?
+        this.partial = false;       // In case of not matching, is it due to not enough chars?
+        this.length = null;         // Length of candidate text matched
+        this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
+    }
 
+    // Pas de surchage de length en JavaScript
+    size()
+    {
+        return this.length;
+    }
+
+    is_partial()
+    {
+        return this.partial;
+    }
+
+    is_match()
+    {
+        return this.match;
+    }
+
+    get_match()
+    {
+        return ((this.length === null ? '' : this.text.substring(0, this.length - 1)));
+    }
+
+    is_overload()
+    {
+        return (this.length !== null && this.length <= this.text.length);
+    }
+
+    get_overload()
+    {
+        if (this.length === null || this.length === this.text.length)
+        {
+            return '';
+        } else {
+            return this.text.substring(this.length);
+        }
+    }
+
+    info(starter='')
+    {
+        console.log(starter + this.text);
+        if (this.match || this.partial)
+        {
+            console.log(starter + '^' * this.length + ' matched');
+            let last = 0;
+            console.log(starter + 'Iter  Element                Nb  Matched');
+            for (let i = 0; i < this.regex.size(); i++)
+            {
+                let nb = this.element_matches[i];
+                let tx = this.text.substring(last, last + nb);
+                console.log(starter + i.toString().padStart(5, '0') + ' ' + this.regex.get(i).toString().padStart(22, ' ') + ' ' + nb.toString().padStart(3, '0') + ' |' + tx + '| (from ' + last.toString() + ')');
+                last += nb;
+            }
+        }
+    }
+
+    toString()
+    {
+        if (this.match)
+        {
+            return '<Match matched |' + this.get_match() + '|>';
+        } else if (this.partial) {
+            return '<Match partial |' + this.get_match() + '|>';
+        } else {
+            return '<Match none>';
+        }
     }
 }
 
