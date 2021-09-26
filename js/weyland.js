@@ -17,13 +17,15 @@ function react()
 {
     let input = document.getElementById('code');
     let output = document.getElementById('output');
-    let val = input.value;
+    let val = input.value.trim();
     if (val.length === 0)
     {
         val = " "
     }
     output.innerText = val;
-    console.log(val);
+    console.log('Text : ' + val);
+    let regex = new Regex(val);
+    console.log(regex.toString());
 }
 
 /**
@@ -151,6 +153,8 @@ Element.ZeroOrOne = '?';
 Element.OneOrMore = '+';
 Element.ZeroOrMore = '*';
 Element.Alternative = '|';
+Element.Escape = '\\';
+
 Element.NewLineCode = "<NL>";
 Element.StartCode = "<START>";
 Element.EndCode = "<END>";
@@ -166,22 +170,56 @@ class Regex
         this.compile();
         if (this.elements.length === 0)
         {
-            throw new Exception("Impossible to have a 0 element regex");
+            throw "Impossible to have a 0 element regex";
         }
     }
 
     toString()
     {
         // Dummy
-        return '<Regex |' + this.repr_pattern + '|>';
+        return '<Regex |' + this.repr_pattern + '| (' + this.elements.length + ')>';
     }
 
     compile()
     {
-        // Dummy
-        for (let c in this.pattern)
+        for (let i = 0; i < this.pattern.length; i++)
         {
-            this.elements.push(new Element(c));
+            let char = this.pattern[i];
+            if (char === '(')
+            {
+                let end = null;
+                for (let j = i+1; j < this.pattern.length; j++)
+                {
+                    char = this.pattern[j];
+                    if (char === ')')
+                    {
+                        end = j;
+                        break;
+                    }
+                }
+                if (end === null)
+                {
+                    throw "No ending ) for ( at " + i;
+                }
+                console.log('Sub regex : ' + this.pattern.substring(i+1, end));
+                let sub_regex = new Regex(this.pattern.substring(i+1, end)); // de après le ( à avant le )
+                this.elements.push(sub_regex);
+                i = end; // on met au ) final et le for passera après
+            } else if (char === Element.Escape) {
+                if (i + 1 === this.pattern.length)
+                {
+                    throw "A regex cannot finish with an escaped char at " + i;
+                }
+                let next_char = this.pattern[i + 1];
+                if (!Regex.Escapables.includes(next_char))
+                {
+
+                }
+            } else if (Regex.Classes.includes(char) || Regex.Positions.includes(char)) {
+                this.elements.push(new Element(char, min=1, max=1, special=true, inverted=false, choice=false));
+            } else {
+                this.elements.push(new Element(char));
+            }
         }
     }
 
@@ -189,7 +227,7 @@ class Regex
     {
         if (index >= this.elements.length)
         {
-            throw new Exception('Index ' + index + ' out of range of Regex (' + this.elements.length + ')')
+            throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
         }
         return this.elements[index].check(candidate);
     }
@@ -269,6 +307,24 @@ class Regex
         // this test is only valid because match search only at the start of the string
     }
 }
+Regex.Modifiers = [Element.ZeroOrOne, Element.OneOrMore, Element.ZeroOrMore];
+Regex.Classes = [Element.Alpha, Element.Digit, Element.AlphaNum, Element.Any];
+Regex.Positions = [Element.Start, Element.End];
+Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
+    Element.OpenGroup,
+    Element.CloseGroup,
+    Element.NameGroup,
+    Element.OpenNameGroup,
+    Element.CloseNameGroup,
+    Element.OpenClass,
+    Element.CloseClass,
+    Element.InvertClass,
+    Element.RangeClass,
+    Element.OpenRepeat,
+    Element.CloseRepeat,
+    Element.SeparatorRepeat,
+    Element.Alternative,
+    Element.Escape];
 
 class Match
 {
@@ -353,4 +409,4 @@ var e = new Element('a');
 console.log(e.toString());
 var r = new Regex('abc');
 console.log(r.toString());
-console.log(r.match('abc'));
+//console.log(r.match('abc'));
