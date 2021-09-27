@@ -20,12 +20,128 @@ function react()
     let val = input.value.trim();
     if (val.length === 0)
     {
-        val = " "
+        val = " ";
     }
     output.innerText = val;
     console.log('Text : ' + val);
     let regex = new Regex(val);
-    console.log(regex.toString());
+    console.log('Regex : ' + regex.toString());
+}
+
+//-----------------------------------------------------------------------------
+// La classe Char
+//-----------------------------------------------------------------------------
+
+class Char
+{
+    constructor(value, escaped=false)
+    {
+        this.val = value;
+        this.esc = escaped;
+    }
+
+    in(elements)
+    {
+        return (elements.includes(this.val) && !this.esc);
+    }
+
+    is(element)
+    {
+        return (element === this.val && !this.esc);
+    }
+
+    toString()
+    {
+        return '<Char |' + this.val + '| esc? ' + this.esc + '>'
+    }
+}
+
+Char.Alpha = '@';
+Char.Digit = '#';
+Char.AlphaNum = '&';
+Char.Any = '.';
+Char.Classes = [Char.Alpha, Char.Digit, Char.AlphaNum, Char.Any];
+
+Char.ZeroOrOne = '?';
+Char.OneOrMore = '+';
+Char.ZeroOrMore = '*';
+Char.Modifiers = [Char.ZeroOrOne, Char.OneOrMore, Char.ZeroOrMore];
+
+Char.OpenClass = '[';
+Char.CloseClass = ']';
+
+//-----------------------------------------------------------------------------
+// La classe Group
+//-----------------------------------------------------------------------------
+
+class Group
+{
+    constructor(parent, start, end)
+    {
+        this.parent = parent;
+        this.start = start;
+        this.end = end;
+    }
+
+    toString()
+    {
+        return '<Group |' + this.parent.substring(this.start, this.end) + '| (' + this.start + ', ' + this.end + ')>'
+    }
+}
+
+//-----------------------------------------------------------------------------
+// La classe Node
+//-----------------------------------------------------------------------------
+
+class Node
+{
+    constructor(parent=null, value=null)
+    {
+        this.parent = parent;
+        this.children = [];
+        this.value = value;
+        this.min = 1;
+        this.max = 1;
+        this.special = false;
+    }
+
+    is_root()
+    {
+        return (this.parent === null);
+    }
+
+    last()
+    {
+        if (this.children.length === 0)
+        {
+            throw "Trying to get last siblings but this node has no children.";
+        }
+        return this.children[this.children.length - 1];
+    }
+
+    add(node)
+    {
+        this.children.push(node);
+    }
+
+    display(level=0)
+    {
+        let val = (this.value === null) ? "" : this.value.toString();
+        let label = (this.parent === null) ? "Root" : "Node";
+        let min = this.min.toString();
+        let max = (this.max === -1) ? "n" : this.max.toString();
+        let card = (this.min === 1 && this.max === 1) ? "" : " {" + min + ", " + max + "}";
+        let s = "    ".repeat(level) + "<" + label + " |" + val + "| " + card + ">";
+        if (this.children.length > 0)
+        {
+            s += "\n";
+        }
+        for (let i=0; i < this.children.length; i++)
+        {
+            s += i.toString().padStart(3, ' ') + '. ' + this.children[i].display(level + 1) + "\n";
+        }
+        return s;
+    }
 }
 
 /**
@@ -42,7 +158,7 @@ class Element
 {
     constructor(core, min=1, max=1, special=false, inverted=false, choice=false)
     {
-        this.core = core;
+        this.core = core; // List of Element for [ ], List of Element or Regex for |
         this.min = min;
         this.max = max;
         this.special = special;
@@ -131,10 +247,6 @@ Element.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 Element.Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
                    'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
                    'u', 'v', 'w', 'x', 'y', 'z'];
-Element.Alpha = '@';
-Element.Digit = '#';
-Element.AlphaNum = '&';
-Element.Any = '.';
 Element.Start = '^';
 Element.End = '$';
 Element.OpenGroup = '(';
@@ -142,16 +254,12 @@ Element.CloseGroup = ')';
 Element.NameGroup = '?'
 Element.OpenNameGroup = '<';
 Element.CloseNameGroup = '>';
-Element.OpenClass = '[';
-Element.CloseClass = ']';
 Element.InvertClass = '^';
 Element.RangeClass = '-';
 Element.OpenRepeat = '{';
 Element.CloseRepeat = '}';
 Element.SeparatorRepeat = ',';
-Element.ZeroOrOne = '?';
-Element.OneOrMore = '+';
-Element.ZeroOrMore = '*';
+
 Element.Alternative = '|';
 Element.Escape = '\\';
 
@@ -161,11 +269,10 @@ Element.EndCode = "<END>";
 
 class Regex
 {
-    constructor(pattern, debug=false)
+    constructor(pattern)
     {
         this.pattern = pattern
         this.repr_pattern = pattern.replace("\n", Element.NewLineCode)
-        this.debug = debug;
         this.elements = [];
         this.compile();
         if (this.elements.length === 0)
@@ -182,45 +289,110 @@ class Regex
 
     compile()
     {
+        // Transformation de la chaîne en une liste de Char : fusion de \x en un seul char (ne compte plus pour 2 !)
+        // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième. 
+        let temp = [];
+        let escaped = false;
         for (let i = 0; i < this.pattern.length; i++)
         {
-            let char = this.pattern[i];
-            if (char === '(')
+            if (this.pattern[i] === "\\" && !escaped)
             {
-                let end = null;
-                for (let j = i+1; j < this.pattern.length; j++)
+                escaped = true;
+            } else {
+                temp.push(new Char(this.pattern[i], escaped));
+                escaped = false;
+            }
+        }
+        // Debug
+        console.log("Chars :");
+        if (temp.length === 0)
+        {
+            throw "A regex must have at least one char.";
+        }
+        if (temp[0].is(Char.Alternative))
+        {
+            throw "A regex cannot start with an alternate char.";
+        }
+        if (temp[0].is(Char.CloseClass))
+        {
+            throw "A regex cannot start with a closing class char.";
+        }
+        if (temp[temp.length-1].is(Char.Escape))
+        {
+            throw "A regex cannot finish with an escaped char.";
+        }
+        for (let i = 0; i < temp.length; i++)
+        {
+            console.log(i.toString().padStart(3, ' ') + '. ' + temp[i]);
+        }
+        // Tree
+        let tree = new Node();
+        let node = tree;
+        for (let i = 0; i < temp.length; i++)
+        {
+            let current = temp[i];
+            if (current.in(Char.Modifiers)) { // +, *, ?
+                let prev = node.last();
+                if (current.is(Char.OneOrMore)) // +
                 {
-                    char = this.pattern[j];
-                    if (char === ')')
+                    prev.max = -1;
+                } else if (current.is(Char.ZeroOrMore)) // *
+                {
+                    prev.min = 0;
+                    prev.max = -1;
+                } else if (current.is(Char.ZeroOrOne)) // ?
+                {
+                    prev.min = 0;
+                }
+            } else if (current.is(Char.OpenClass)) {
+                
+            } else {
+                node.add(new Node(node, current)); 
+            }
+        }
+        console.log('Display tree :');
+        console.log(tree.display());
+
+        /*
+        // On fait les groupes pour () et []
+        let tree = new Node();
+        let node = tree;
+        for (let i = 0; i < temp.length; i++)
+        {
+            if (temp[i].is(Element.OpenGroup))
+            {
+                let level = 1;
+                let end = null;
+                for (let j = i+1; j < temp.length; j++)
+                {
+                    if (temp[j].is(Element.OpenGroup))
                     {
-                        end = j;
-                        break;
+                        level += 1;
+                    }
+                    if (temp[j].is(Element.CloseGroup))
+                    {
+                        if (level == 1)
+                        {
+                            end = j;
+                            break;
+                        } else {
+                            level -= 1;
+                        }
                     }
                 }
                 if (end === null)
                 {
                     throw "No ending ) for ( at " + i;
                 }
-                console.log('Sub regex : ' + this.pattern.substring(i+1, end));
-                let sub_regex = new Regex(this.pattern.substring(i+1, end)); // de après le ( à avant le )
-                this.elements.push(sub_regex);
-                i = end; // on met au ) final et le for passera après
-            } else if (char === Element.Escape) {
-                if (i + 1 === this.pattern.length)
-                {
-                    throw "A regex cannot finish with an escaped char at " + i;
-                }
-                let next_char = this.pattern[i + 1];
-                if (!Regex.Escapables.includes(next_char))
-                {
-
-                }
-            } else if (Regex.Classes.includes(char) || Regex.Positions.includes(char)) {
-                this.elements.push(new Element(char, min=1, max=1, special=true, inverted=false, choice=false));
+                node.add(new Node(node, new Group(i, j)));
             } else {
-                this.elements.push(new Element(char));
+                node.add(new Node(node, temp[i]));
             }
         }
+        
+        */
+        this.elements = [new Element('a')]; // Dummy
+        return;
     }
 
     check_at(candidate, index)
@@ -307,8 +479,7 @@ class Regex
         // this test is only valid because match search only at the start of the string
     }
 }
-Regex.Modifiers = [Element.ZeroOrOne, Element.OneOrMore, Element.ZeroOrMore];
-Regex.Classes = [Element.Alpha, Element.Digit, Element.AlphaNum, Element.Any];
+
 Regex.Positions = [Element.Start, Element.End];
 Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
     Element.OpenGroup,
@@ -405,8 +576,8 @@ class Match
     }
 }
 
-var e = new Element('a');
-console.log(e.toString());
-var r = new Regex('abc');
-console.log(r.toString());
+//var e = new Element('a');
+//console.log(e.toString());
+//var r = new Regex('abc');
+//console.log(r.toString());
 //console.log(r.match('abc'));
