@@ -1,3 +1,51 @@
+/**
+ * Evolutions from Weyland 0.x :
+ * Replaced option and repeat parameters by min and max.
+ * - min=0 => option
+ * - max>1 => repeat
+ * Added choice parameter to distinguish between choice [ ] and group ( )
+ * 
+ * Added possibility of grouping
+ * Added alternative operator |
+ */
+
+/*
+class Element
+{
+    toString()
+    {
+        let s = this.special ? "Special" : "Element";
+        if (this.inverted)
+        {
+            s += "!";
+        }
+        let v = this.core.replace("\n", Element.NewLineCode);
+        return "<" + s + " |" + v + "| {" + this.min + ", " + this.max + "}>";
+    }
+
+    is_choice()
+    {
+        return this.choice;
+    }
+
+    is_group()
+    {
+        return Array.isArray(this.core) && !this.choice;
+    }
+
+    is_included(other)
+    {
+        // gérer les choix et les groupes
+    }
+}
+*/
+
+//-----------------------------------------------------------------------------
+// Fonctions de démarrage et de réaction
+//-----------------------------------------------------------------------------
+
+/* Fonctions de démarrage */
+
 function start()
 {
     let input = document.getElementById('code');
@@ -32,6 +80,10 @@ function react()
 // La classe Char
 //-----------------------------------------------------------------------------
 
+/* Elle permet de faire abstraction des échappements de caractère.
+   Lorsque l'on demande si ce caractère est-il ")" avec is(")"), c'est implicite qu'il n'est pas échappé.
+ */
+
 class Char
 {
     constructor(value, escaped=false)
@@ -56,6 +108,9 @@ class Char
     }
 }
 
+// Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
+// Added (3) : @ # &
+
 Char.Alpha = '@';
 Char.Digit = '#';
 Char.AlphaNum = '&';
@@ -65,10 +120,34 @@ Char.Classes = [Char.Alpha, Char.Digit, Char.AlphaNum, Char.Any];
 Char.ZeroOrOne = '?';
 Char.OneOrMore = '+';
 Char.ZeroOrMore = '*';
-Char.Modifiers = [Char.ZeroOrOne, Char.OneOrMore, Char.ZeroOrMore];
+Char.Quantifiers = [Char.ZeroOrOne, Char.OneOrMore, Char.ZeroOrMore];
 
 Char.OpenClass = '[';
 Char.CloseClass = ']';
+
+Char.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+Char.Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
+                   'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
+                   'u', 'v', 'w', 'x', 'y', 'z'];
+Char.Start = '^';
+Char.End = '$';
+Char.OpenGroup = '(';
+Char.CloseGroup = ')';
+Char.NameGroup = '?'
+Char.OpenNameGroup = '<';
+Char.CloseNameGroup = '>';
+Char.InvertClass = '^';
+Char.RangeClass = '-';
+Char.OpenRepeat = '{';
+Char.CloseRepeat = '}';
+Char.SeparatorRepeat = ',';
+
+Char.Alternative = '|';
+Char.Escape = '\\';
+
+Char.NewLineCode = "<NL>";
+Char.StartCode = "<START>";
+Char.EndCode = "<END>";
 
 //-----------------------------------------------------------------------------
 // La classe Group
@@ -95,19 +174,70 @@ class Group
 
 class Node
 {
-    constructor(parent=null, value=null)
+    constructor(parent=null, value=null, min=1, max=1, special=false, inverted=false, choice=false) // Inverted & choice not used
     {
         this.parent = parent;
         this.children = [];
-        this.value = value;
-        this.min = 1;
-        this.max = 1;
-        this.special = false;
+        this.value = value; // List of Element for [ ], List of Element or Regex for |
+        this.min = min;
+        this.max = max;
+        this.special = special;
+    }
+
+    is_special()
+    {
+        return this.special;
+    }
+
+    is_optionnal()
+    {
+        return this.min === 0;
+    }
+
+    is_repeatable()
+    {
+        return this.max > 1;
     }
 
     is_root()
     {
         return (this.parent === null);
+    }
+
+    
+    check(candidate)
+    {
+        let res = false;
+        if (this.is_choice()) // Invalid now
+        {
+            for (let sub_elem in self.core)
+            {
+                res = sub_elem.check(candidate);
+                if (res)
+                {
+                    break;
+                }
+            }
+        } else if (this.is_group()) { // Invalid now
+
+        } else if (this.special) {
+            if (this.core === Element.Alpha)
+            {
+                res = (Element.Letters.includes(candidate));
+            } else if (this.core === Element.Digit) {
+                res = (Element.Digits.includes(candidate));
+            } else if (this.core === Element.AlphaNum) {
+                res = (Element.Letters.includes(candidate) || Element.Digits.includes(candidate));
+            } else if (this.core === Element.Any) {
+                res = (candidate !== '\n');
+            } else if (this.core === Element.Start) {
+                res = (candidate === '<START>');
+            } else if (this.core === Element.End) {
+                res = (candidate === '<END>');
+            }
+        } else {
+            res = (candidate == this.core);
+        }
     }
 
     last()
@@ -144,128 +274,9 @@ class Node
     }
 }
 
-/**
- * Evolutions from Weyland 0.x :
- * Replaced option and repeat parameters by min and max.
- * - min=0 => option
- * - max>1 => repeat
- * Added choice parameter to distinguish between choice [ ] and group ( )
- * 
- * Added possibility of grouping
- * Added alternative operator |
- */
-class Element
-{
-    constructor(core, min=1, max=1, special=false, inverted=false, choice=false)
-    {
-        this.core = core; // List of Element for [ ], List of Element or Regex for |
-        this.min = min;
-        this.max = max;
-        this.special = special;
-        this.inverted = inverted;
-        this.choice = choice;
-    }
-
-    toString()
-    {
-        let s = this.special ? "Special" : "Element";
-        if (this.inverted)
-        {
-            s += "!";
-        }
-        let v = this.core.replace("\n", Element.NewLineCode);
-        return "<" + s + " |" + v + "| {" + this.min + ", " + this.max + "}>";
-    }
-
-    is_special()
-    {
-        return this.special;
-    }
-
-    is_optionnal()
-    {
-        return this.min === 0;
-    }
-
-    is_repeatable()
-    {
-        return this.max > 1;
-    }
-
-    is_choice()
-    {
-        return this.choice;
-    }
-
-    is_group()
-    {
-        return Array.isArray(this.core) && !this.choice;
-    }
-
-    is_included(other)
-    {
-        // gérer les choix et les groupes
-    }
-
-    check(candidate)
-    {
-        let res = false;
-        if (this.is_choice())
-        {
-            for (let sub_elem in self.core)
-            {
-                res = sub_elem.check(candidate);
-                if (res)
-                {
-                    break;
-                }
-            }
-        } else if (this.is_group()) {
-
-        } else if (this.special) {
-            if (this.core === Element.Alpha)
-            {
-                res = (Element.Letters.includes(candidate));
-            } else if (this.core === Element.Digit) {
-                res = (Element.Digits.includes(candidate));
-            } else if (this.core === Element.AlphaNum) {
-                res = (Element.Letters.includes(candidate) || Element.Digits.includes(candidate));
-            } else if (this.core === Element.Any) {
-                res = (candidate !== '\n');
-            } else if (this.core === Element.Start) {
-                res = (candidate === '<START>');
-            } else if (this.core === Element.End) {
-                res = (candidate === '<END>');
-            }
-        } else {
-            res = (candidate == this.core);
-        }
-    }
-}
-
-Element.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-Element.Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
-                   'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
-                   'u', 'v', 'w', 'x', 'y', 'z'];
-Element.Start = '^';
-Element.End = '$';
-Element.OpenGroup = '(';
-Element.CloseGroup = ')';
-Element.NameGroup = '?'
-Element.OpenNameGroup = '<';
-Element.CloseNameGroup = '>';
-Element.InvertClass = '^';
-Element.RangeClass = '-';
-Element.OpenRepeat = '{';
-Element.CloseRepeat = '}';
-Element.SeparatorRepeat = ',';
-
-Element.Alternative = '|';
-Element.Escape = '\\';
-
-Element.NewLineCode = "<NL>";
-Element.StartCode = "<START>";
-Element.EndCode = "<END>";
+//-----------------------------------------------------------------------------
+// La classe Regex
+//-----------------------------------------------------------------------------
 
 class Regex
 {
@@ -331,7 +342,7 @@ class Regex
         for (let i = 0; i < temp.length; i++)
         {
             let current = temp[i];
-            if (current.in(Char.Modifiers)) { // +, *, ?
+            if (current.in(Char.Quantifiers)) { // +, *, ?
                 let prev = node.last();
                 if (current.is(Char.OneOrMore)) // +
                 {
@@ -480,22 +491,26 @@ class Regex
     }
 }
 
-Regex.Positions = [Element.Start, Element.End];
+Regex.Positions = [Char.Start, Char.End];
 Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
-    Element.OpenGroup,
-    Element.CloseGroup,
-    Element.NameGroup,
-    Element.OpenNameGroup,
-    Element.CloseNameGroup,
-    Element.OpenClass,
-    Element.CloseClass,
-    Element.InvertClass,
-    Element.RangeClass,
-    Element.OpenRepeat,
-    Element.CloseRepeat,
-    Element.SeparatorRepeat,
-    Element.Alternative,
-    Element.Escape];
+    Char.OpenGroup,
+    Char.CloseGroup,
+    Char.NameGroup,
+    Char.OpenNameGroup,
+    Char.CloseNameGroup,
+    Char.OpenClass,
+    Char.CloseClass,
+    Char.InvertClass,
+    Char.RangeClass,
+    Char.OpenRepeat,
+    Char.CloseRepeat,
+    Char.SeparatorRepeat,
+    Char.Alternative,
+    Char.Escape];
+
+//-----------------------------------------------------------------------------
+// La classe Match
+//-----------------------------------------------------------------------------
 
 class Match
 {
