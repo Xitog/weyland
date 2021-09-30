@@ -7,38 +7,10 @@
  * 
  * Added possibility of grouping
  * Added alternative operator |
+ * 
+ * Classes + Modifiers + Custom Classes
+ * Todo : invert Custom Classes, range in Custom Classes, group, named group, match
  */
-
-/*
-class Element
-{
-    toString()
-    {
-        let s = this.special ? "Special" : "Element";
-        if (this.inverted)
-        {
-            s += "!";
-        }
-        let v = this.core.replace("\n", Element.NewLineCode);
-        return "<" + s + " |" + v + "| {" + this.min + ", " + this.max + "}>";
-    }
-
-    is_choice()
-    {
-        return this.choice;
-    }
-
-    is_group()
-    {
-        return Array.isArray(this.core) && !this.choice;
-    }
-
-    is_included(other)
-    {
-        // gérer les choix et les groupes
-    }
-}
-*/
 
 //-----------------------------------------------------------------------------
 // Fonctions de démarrage et de réaction
@@ -61,19 +33,67 @@ function start()
     input.value = ' ';
 }
 
+function explore(tree, regex)
+{
+    let child = document.createElement('li');
+    child.innerText = regex.toString();
+    if (regex instanceof Regex)
+    {
+        if (regex.elements.length > 0)
+        {
+            let subtree = document.createElement('ol');
+            for (let e of regex.elements)
+            {
+                explore(subtree, e);
+            }
+            child.appendChild(subtree);
+        }
+    } else if (regex instanceof Class) {
+        if (regex.value === Class.Custom)
+        {
+            let subtree = document.createElement('ol');
+            for (let e of regex.elements)
+            {
+                explore(subtree, e);
+            }
+            child.appendChild(subtree);
+        }
+    } else if (regex instanceof Element) {
+        // pass
+    } 
+    tree.appendChild(child);
+}
+
 function react()
 {
     let input = document.getElementById('code');
     let output = document.getElementById('output');
+    let ana1 = document.getElementById('ana1');
+    ana1.innerHTML = "";
+    let ana2 = document.getElementById('ana2');
+    ana2.innerHTML = "";
     let val = input.value.trim();
     if (val.length === 0)
     {
         val = " ";
     }
     output.innerText = val;
-    console.log('Text : ' + val);
-    let regex = new Regex(val);
-    console.log('Regex : ' + regex.toString());
+    let regex = new Regex(val, false);
+    // Get Chars
+    let chars = regex.precompile();
+    let list = document.createElement('ol');
+    for (let i = 0; i < chars.length; i++)
+    {
+        let e = document.createElement('li');
+        e.innerText = chars[i].toString();
+        list.appendChild(e);
+    }
+    ana1.appendChild(list);
+    // Get Regex
+    regex.compile();
+    let tree = document.createElement('ul');
+    explore(tree, regex);
+    ana2.appendChild(tree);
 }
 
 //-----------------------------------------------------------------------------
@@ -88,105 +108,55 @@ class Char
 {
     constructor(value, escaped=false)
     {
-        this.val = value;
-        this.esc = escaped;
+        this.value = value;
+        this.escaped = escaped;
     }
 
     in(elements)
     {
-        return (elements.includes(this.val) && !this.esc);
+        return (elements.includes(this.value) && !this.escaped);
     }
 
     is(element)
     {
-        return (element === this.val && !this.esc);
+        return (element === this.value && !this.escaped);
+    }
+
+    is_escaped(element)
+    {
+        return (element === this.value && this.escaped);
     }
 
     toString()
     {
-        return '<Char |' + this.val + '| esc? ' + this.esc + '>'
-    }
-}
-
-// Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
-// Added (3) : @ # &
-
-Char.Alpha = '@';
-Char.Digit = '#';
-Char.AlphaNum = '&';
-Char.Any = '.';
-Char.Classes = [Char.Alpha, Char.Digit, Char.AlphaNum, Char.Any];
-
-Char.ZeroOrOne = '?';
-Char.OneOrMore = '+';
-Char.ZeroOrMore = '*';
-Char.Quantifiers = [Char.ZeroOrOne, Char.OneOrMore, Char.ZeroOrMore];
-
-Char.OpenClass = '[';
-Char.CloseClass = ']';
-
-Char.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-Char.Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
-                   'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
-                   'u', 'v', 'w', 'x', 'y', 'z'];
-Char.Start = '^';
-Char.End = '$';
-Char.OpenGroup = '(';
-Char.CloseGroup = ')';
-Char.NameGroup = '?'
-Char.OpenNameGroup = '<';
-Char.CloseNameGroup = '>';
-Char.InvertClass = '^';
-Char.RangeClass = '-';
-Char.OpenRepeat = '{';
-Char.CloseRepeat = '}';
-Char.SeparatorRepeat = ',';
-
-Char.Alternative = '|';
-Char.Escape = '\\';
-
-Char.NewLineCode = "<NL>";
-Char.StartCode = "<START>";
-Char.EndCode = "<END>";
-
-//-----------------------------------------------------------------------------
-// La classe Group
-//-----------------------------------------------------------------------------
-
-class Group
-{
-    constructor(parent, start, end)
-    {
-        this.parent = parent;
-        this.start = start;
-        this.end = end;
-    }
-
-    toString()
-    {
-        return '<Group |' + this.parent.substring(this.start, this.end) + '| (' + this.start + ', ' + this.end + ')>'
+        return 'Char |' + this.value + '| esc? ' + this.escaped;
     }
 }
 
 //-----------------------------------------------------------------------------
-// La classe Node
+// La classe Element
 //-----------------------------------------------------------------------------
 
-class Node
+class Element
 {
-    constructor(parent=null, value=null, min=1, max=1, special=false, inverted=false, choice=false) // Inverted & choice not used
+    constructor(value, min=1, max=1, greedy=true)
     {
-        this.parent = parent;
-        this.children = [];
-        this.value = value; // List of Element for [ ], List of Element or Regex for |
+        this.value = value;
         this.min = min;
         this.max = max;
-        this.special = special;
+        this.greedy = greedy;
+        this.value = value.replace("\n", Element.NewLineCode)
     }
 
-    is_special()
+    toString()
     {
-        return this.special;
+        let card = "";
+        if (this.min !== 1 || this.max !== 1)
+        {
+            let max = (this.max === -1) ? "*" : this.max;
+            card = " {" + this.min + ", " + max + "}";
+        }
+        return "Element |" + this.value + "|" + card;
     }
 
     is_optionnal()
@@ -199,12 +169,269 @@ class Node
         return this.max > 1;
     }
 
-    is_root()
+    check(candidate)
     {
-        return (this.parent === null);
+        return (candidate === this.value);
+    }
+}
+// Classes
+Element.Alpha = '@';
+Element.Digit = '#';
+Element.DigitEscaped = 'd';
+Element.AlphaNum = '&'; // w (alpha + digit + _)
+Element.AlphaNumEscaped = 'w';
+Element.Space = '°';    // s (' ', '\t', '\n', '\f')
+Element.SpaceEscaped = 's';
+Element.Any = '.';
+// Custom classes
+Element.OpenClass = '[';
+Element.CloseClass = ']';
+// Quantifiers
+Element.ZeroOrOne = '?';
+Element.OneOrMore = '+';
+Element.ZeroOrMore = '*';
+// Group
+Element.CloseGroup = ')';
+// Others
+Element.Alternative = '|';
+Element.Escape = '\\';
+// For clean display
+Element.NewLineCode = "<NL>";
+
+//-----------------------------------------------------------------------------
+// La classe Class
+//-----------------------------------------------------------------------------
+
+class Class extends Element
+{
+    constructor(type, elements=null)
+    {
+        super(type, 1, 1, false);
+        if (type !== Element.Alpha && type !== Element.Digit && type !== Element.AlphaNum 
+            && type !== Element.Space && type !== Element.Any && type !== Class.Custom)
+        {
+            throw "A class must be digit, letter, space, word or custom not: |" + type + "|.";
+        }
+        if (type === Class.Custom && (elements === null || elements.length <= 1))
+        {
+            throw "A custom class must have at least two elements.";
+        }
+        this.elements = elements;
     }
 
-    
+    toString()
+    {
+        let card = "";
+        if (this.min !== 1 || this.max !== 1)
+        {
+            let max = (this.max === -1) ? "*" : this.max;
+            card = " {" + this.min + ", " + max + "}";
+        }
+        let nb = "";
+        if (this.value === Class.Custom)
+        {
+            nb = " (" + this.elements.length + ")";
+        }
+        return "Class |" + this.value + "|" + card + nb;
+    }
+
+    check(candidate) // :TODO:
+    {
+        if (this.type === Element.Alpha)
+        {
+
+        } else if (this.type === Element.Digit)
+        {
+
+        } else if (this.type === Element.AlphaNum)
+        {
+
+        } else if (this.type === Element.Space)
+        {
+
+        } else if (this.type === Element.Any)
+        {
+
+        } else { // Custom
+
+        }
+    }
+}
+Class.Custom = 'Custom';
+
+//-----------------------------------------------------------------------------
+// La classe Regex
+//-----------------------------------------------------------------------------
+
+class Regex extends Element
+{
+    constructor(pattern, autocompile=true)
+    {
+        super(pattern, 1, 1, false);
+        this.elements = [];
+        if (autocompile)
+        {
+            this.compile();
+        }
+    }
+
+    toString()
+    {
+        return 'Regex |' + this.value + '| (' + this.elements.length.toString() + ')';
+    }
+
+    precompile()
+    {
+        // Transformation de la chaîne en une liste de Char : fusion de \x en un seul char (ne compte plus pour 2 !)
+        // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième. 
+        let temp = [];
+        let escaped = false;
+        for (let i = 0; i < this.value.length; i++)
+        {
+            if (this.value[i] === "\\" && !escaped)
+            {
+                escaped = true;
+            } else {
+                temp.push(new Char(this.value[i], escaped));
+                escaped = false;
+            }
+        }
+        if (escaped) // Si on finit par un \ on le met mais ça ne passera pas les checks
+        {
+            temp.push(new Char(this.value[this.value.length-1], false));
+        }
+        return temp;
+    }
+
+    compile()
+    {
+        let temp = this.precompile();
+        this.elements = [];
+        // Checks
+        if (temp.length === 0)
+        {
+            throw "A regex must have at least one char.";
+        }
+        if (temp[0].is(Element.ZeroOrMore) || temp[0].is(Element.ZeroOrOne) || temp[0].is(Element.OneOrMore))
+        {
+            throw "A regex cannot start with a quantifier.";
+        }
+        if (temp[0].is(Element.Alternative))
+        {
+            throw "A regex cannot start with an alternate char.";
+        }
+        if (temp[0].is(Element.CloseClass))
+        {
+            throw "A regex cannot start with a closing class char.";
+        }
+        if (temp[temp.length-1].is(Element.Escape))
+        {
+            throw "A regex cannot finish with an escaped char.";
+        }
+        // Tree
+        for (let i = 0; i < temp.length; i++)
+        {
+            let current = temp[i];
+            let prev = (this.elements.length > 0) ? this.elements[this.elements.length-1] : null;
+            // Classes
+            if (current.is(Element.Digit) || current.is_escaped(Element.DigitEscaped))
+            {
+                this.elements.push(new Class(Element.Digit));
+            }
+            else if (current.is(Element.Alpha))
+            {
+                this.elements.push(new Class(Element.Alpha));
+            }
+            else if (current.is(Element.Space) || current.is_escaped(Element.SpaceEscaped))
+            {
+                this.elements.push(new Class(Element.Space));
+            }
+            else if (current.is(Element.AlphaNum) || current.is_escaped(Element.AlphaNumEscaped))
+            {
+                this.elements.push(new Class(Element.AlphaNum));
+            } else if (current.is(Element.Any))
+            {
+                this.element.push(new Class(Element.Any));
+            }
+            // Custom classes
+            else if (current.is(Element.OpenClass))
+            {
+                let end = -1;
+                let members = [];
+                for (let j = i + 1; j < temp.length; j++)
+                {
+                    if (temp[j].is(Element.CloseClass))
+                    {
+                        end = j;
+                        break;
+                    } else {
+                        members.push(new Element(temp[j].value));
+                    }
+                }
+                if (end === -1)
+                {
+                    throw "No ending ] for [ at " + i;
+                }
+                if (members.length < 2)
+                {
+                    throw "A custom class must have at least 2 elements."
+                }
+                this.elements.push(new Class(Class.Custom, members));
+                console.log(this.elements[this.elements.length-1]);
+                i = end;     
+            }
+            // Quantifiers
+            else if (current.is(Element.OneOrMore)) // +
+            {
+                prev.max = -1;
+            }
+            else if (current.is(Element.ZeroOrMore)) // *
+            {
+                prev.min = 0;
+                prev.max = -1;
+            }
+            else if (current.is(Element.ZeroOrOne)) // ?
+            {
+                prev.min = 0;
+            }
+            else
+            {
+                this.elements.push(new Element(current.value)); 
+            }
+        }
+        if (this.elements.length === 0)
+        {
+            throw "Impossible to have a regex with 0 element.";
+        }
+    }
+}
+
+// Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
+// Added (3) : @ # &
+
+Char.Spaces = [' ', '\t', '\n', '\f'];
+Char.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+Char.Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
+                   'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
+                   'u', 'v', 'w', 'x', 'y', 'z'];
+
+Char.Start = '^';
+Char.End = '$';
+Char.OpenGroup = '(';
+
+Char.NameGroup = '?'
+Char.OpenNameGroup = '<';
+Char.CloseNameGroup = '>';
+Char.InvertClass = '^';
+Char.RangeClass = '-';
+Char.OpenRepeat = '{';
+Char.CloseRepeat = '}';
+Char.SeparatorRepeat = ',';
+
+Char.StartCode = "<START>";
+Char.EndCode = "<END>";
+
+/*
     check(candidate)
     {
         let res = false;
@@ -218,9 +445,7 @@ class Node
                     break;
                 }
             }
-        } else if (this.is_group()) { // Invalid now
 
-        } else if (this.special) {
             if (this.core === Element.Alpha)
             {
                 res = (Element.Letters.includes(candidate));
@@ -235,23 +460,6 @@ class Node
             } else if (this.core === Element.End) {
                 res = (candidate === '<END>');
             }
-        } else {
-            res = (candidate == this.core);
-        }
-    }
-
-    last()
-    {
-        if (this.children.length === 0)
-        {
-            throw "Trying to get last siblings but this node has no children.";
-        }
-        return this.children[this.children.length - 1];
-    }
-
-    add(node)
-    {
-        this.children.push(node);
     }
 
     display(level=0)
@@ -272,140 +480,14 @@ class Node
         }
         return s;
     }
-}
+*/
 
 //-----------------------------------------------------------------------------
-// La classe Regex
+// L'ancienne classe Regex à intégrer dans la nouvelle
 //-----------------------------------------------------------------------------
 
-class Regex
+class Regex2
 {
-    constructor(pattern)
-    {
-        this.pattern = pattern
-        this.repr_pattern = pattern.replace("\n", Element.NewLineCode)
-        this.elements = [];
-        this.compile();
-        if (this.elements.length === 0)
-        {
-            throw "Impossible to have a 0 element regex";
-        }
-    }
-
-    toString()
-    {
-        // Dummy
-        return '<Regex |' + this.repr_pattern + '| (' + this.elements.length + ')>';
-    }
-
-    compile()
-    {
-        // Transformation de la chaîne en une liste de Char : fusion de \x en un seul char (ne compte plus pour 2 !)
-        // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième. 
-        let temp = [];
-        let escaped = false;
-        for (let i = 0; i < this.pattern.length; i++)
-        {
-            if (this.pattern[i] === "\\" && !escaped)
-            {
-                escaped = true;
-            } else {
-                temp.push(new Char(this.pattern[i], escaped));
-                escaped = false;
-            }
-        }
-        // Debug
-        console.log("Chars :");
-        if (temp.length === 0)
-        {
-            throw "A regex must have at least one char.";
-        }
-        if (temp[0].is(Char.Alternative))
-        {
-            throw "A regex cannot start with an alternate char.";
-        }
-        if (temp[0].is(Char.CloseClass))
-        {
-            throw "A regex cannot start with a closing class char.";
-        }
-        if (temp[temp.length-1].is(Char.Escape))
-        {
-            throw "A regex cannot finish with an escaped char.";
-        }
-        for (let i = 0; i < temp.length; i++)
-        {
-            console.log(i.toString().padStart(3, ' ') + '. ' + temp[i]);
-        }
-        // Tree
-        let tree = new Node();
-        let node = tree;
-        for (let i = 0; i < temp.length; i++)
-        {
-            let current = temp[i];
-            if (current.in(Char.Quantifiers)) { // +, *, ?
-                let prev = node.last();
-                if (current.is(Char.OneOrMore)) // +
-                {
-                    prev.max = -1;
-                } else if (current.is(Char.ZeroOrMore)) // *
-                {
-                    prev.min = 0;
-                    prev.max = -1;
-                } else if (current.is(Char.ZeroOrOne)) // ?
-                {
-                    prev.min = 0;
-                }
-            } else if (current.is(Char.OpenClass)) {
-                
-            } else {
-                node.add(new Node(node, current)); 
-            }
-        }
-        console.log('Display tree :');
-        console.log(tree.display());
-
-        /*
-        // On fait les groupes pour () et []
-        let tree = new Node();
-        let node = tree;
-        for (let i = 0; i < temp.length; i++)
-        {
-            if (temp[i].is(Element.OpenGroup))
-            {
-                let level = 1;
-                let end = null;
-                for (let j = i+1; j < temp.length; j++)
-                {
-                    if (temp[j].is(Element.OpenGroup))
-                    {
-                        level += 1;
-                    }
-                    if (temp[j].is(Element.CloseGroup))
-                    {
-                        if (level == 1)
-                        {
-                            end = j;
-                            break;
-                        } else {
-                            level -= 1;
-                        }
-                    }
-                }
-                if (end === null)
-                {
-                    throw "No ending ) for ( at " + i;
-                }
-                node.add(new Node(node, new Group(i, j)));
-            } else {
-                node.add(new Node(node, temp[i]));
-            }
-        }
-        
-        */
-        this.elements = [new Element('a')]; // Dummy
-        return;
-    }
-
     check_at(candidate, index)
     {
         if (index >= this.elements.length)
@@ -590,9 +672,3 @@ class Match
         }
     }
 }
-
-//var e = new Element('a');
-//console.log(e.toString());
-//var r = new Regex('abc');
-//console.log(r.toString());
-//console.log(r.match('abc'));
