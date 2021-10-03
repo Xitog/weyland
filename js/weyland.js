@@ -186,6 +186,8 @@ Element.Any = '.';
 // Custom classes
 Element.OpenClass = '[';
 Element.CloseClass = ']';
+Element.InvertClass = '^';
+Element.RangeClass = '-';
 // Quantifiers
 Element.ZeroOrOne = '?';
 Element.OneOrMore = '+';
@@ -197,6 +199,19 @@ Element.Alternative = '|';
 Element.Escape = '\\';
 // For clean display
 Element.NewLineCode = "<NL>";
+// Base
+Char.Spaces = [' ', '\t', '\n', '\f'];
+Char.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+Char.Letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+                'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+                'U', 'V', 'W', 'X', 'Y', 'Z',
+                'Á', 'À', 'Â', 'Ä', 'Å', 'Ă', 'Æ', 'Ç', 'É', 'È', 'Ê', 'Ë', 'Í', 'Ì', 'Î', 'Œ', 'Ñ', 
+                'Ó', 'Ò', 'Ô', 'Ö', 'Ø', 'Ú', 'Ù', 'Û', 'Ü', 'Š', 'Ș', 'Ț', 'Ž', 'ẞ',
+                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
+                'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
+                'u', 'v', 'w', 'x', 'y', 'z', 
+                'á', 'à', 'â', 'ä', 'å', 'ă', 'æ', 'ç', 'é', 'è', 'ê', 'ë', 'í', 'ì', 'î', 'œ', 'ñ', 
+                'ó', 'ò', 'ô', 'ö', 'ø', 'ú', 'ù', 'û', 'ü', 'š', 'ș', 'ț', 'ž', 'ß'];
 
 //-----------------------------------------------------------------------------
 // La classe Class
@@ -204,7 +219,7 @@ Element.NewLineCode = "<NL>";
 
 class Class extends Element
 {
-    constructor(type, elements=null)
+    constructor(type, inverted, elements=null)
     {
         super(type, 1, 1, false);
         if (type !== Element.Alpha && type !== Element.Digit && type !== Element.AlphaNum 
@@ -212,6 +227,7 @@ class Class extends Element
         {
             throw "A class must be digit, letter, space, word or custom not: |" + type + "|.";
         }
+        this.inverted = inverted;
         if (type === Class.Custom && (elements === null || elements.length <= 1))
         {
             throw "A custom class must have at least two elements.";
@@ -232,7 +248,8 @@ class Class extends Element
         {
             nb = " (" + this.elements.length + ")";
         }
-        return "Class |" + this.value + "|" + card + nb;
+        let inverted = (this.inverted) ? " inverted" : ""
+        return "Class |" + this.value + "|" + card + nb + inverted;
     }
 
     check(candidate) // :TODO:
@@ -358,9 +375,14 @@ class Regex extends Element
             {
                 let end = -1;
                 let members = [];
+                let inverted = false;
                 for (let j = i + 1; j < temp.length; j++)
                 {
-                    if (temp[j].is(Element.CloseClass))
+                    if (j == i + 1 && temp[j].is(Element.InvertClass))
+                    {
+                        inverted = true;
+                    }
+                    else if (temp[j].is(Element.CloseClass))
                     {
                         end = j;
                         break;
@@ -376,7 +398,7 @@ class Regex extends Element
                 {
                     throw "A custom class must have at least 2 elements."
                 }
-                this.elements.push(new Class(Class.Custom, members));
+                this.elements.push(new Class(Class.Custom, inverted, members));
                 console.log(this.elements[this.elements.length-1]);
                 i = end;     
             }
@@ -409,12 +431,6 @@ class Regex extends Element
 // Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
 // Added (3) : @ # &
 
-Char.Spaces = [' ', '\t', '\n', '\f'];
-Char.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-Char.Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
-                   'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
-                   'u', 'v', 'w', 'x', 'y', 'z'];
-
 Char.Start = '^';
 Char.End = '$';
 Char.OpenGroup = '(';
@@ -422,8 +438,7 @@ Char.OpenGroup = '(';
 Char.NameGroup = '?'
 Char.OpenNameGroup = '<';
 Char.CloseNameGroup = '>';
-Char.InvertClass = '^';
-Char.RangeClass = '-';
+
 Char.OpenRepeat = '{';
 Char.CloseRepeat = '}';
 Char.SeparatorRepeat = ',';
