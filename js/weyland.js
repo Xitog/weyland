@@ -169,7 +169,7 @@ class Element
         return this.max > 1;
     }
 
-    check(candidate)
+    match(candidate)
     {
         return (candidate === this.value);
     }
@@ -200,11 +200,12 @@ Element.Escape = '\\';
 // For clean display
 Element.NewLineCode = "<NL>";
 // Base
-Char.Spaces = [' ', '\t', '\n', '\f'];
-Char.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-Char.Letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-                'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-                'U', 'V', 'W', 'X', 'Y', 'Z',
+Element.Spaces = [' ', '\t', '\n', '\f'];
+Element.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+Element.Latin = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+'U', 'V', 'W', 'X', 'Y', 'Z'];
+Element.Letters = Element.Latin + [
                 'Á', 'À', 'Â', 'Ä', 'Å', 'Ă', 'Æ', 'Ç', 'É', 'È', 'Ê', 'Ë', 'Í', 'Ì', 'Î', 'Œ', 'Ñ', 
                 'Ó', 'Ò', 'Ô', 'Ö', 'Ø', 'Ú', 'Ù', 'Û', 'Ü', 'Š', 'Ș', 'Ț', 'Ž', 'ẞ',
                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
@@ -252,25 +253,32 @@ class Class extends Element
         return "Class |" + this.value + "|" + card + nb + inverted;
     }
 
-    check(candidate) // :TODO:
+    match(candidate)
     {
         if (this.type === Element.Alpha)
         {
-
+            return Element.Letters.includes(candidate);
         } else if (this.type === Element.Digit)
         {
-
+            return Element.Digits.includes(candidate);
         } else if (this.type === Element.AlphaNum)
         {
-
+            return (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
         } else if (this.type === Element.Space)
         {
-
+            return Element.Spaces.includes(candidate);
         } else if (this.type === Element.Any)
         {
-
+            return candidate !== '\n';
         } else { // Custom
-
+            for (let e of this.elements)
+            {
+                if (e.check(candidate))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
@@ -426,6 +434,57 @@ class Regex extends Element
             throw "Impossible to have a regex with 0 element.";
         }
     }
+
+    match(candidate)
+    {
+        let matched = Array(this.elements.length).fill(0);
+        let index_candidate = 0;
+        let index_regex = 0;
+        let final = new Match(this, candidate);
+        let res = true;
+        while (index_candidate < candidate.length && index_regex < this.elements.length)
+        {
+            let elem = this.elements[index_regex];
+            if (index_regex >= this.elements.length)
+            {
+                throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
+            }
+            res = elem.match(candidate[index_candidate]);
+            console.log('        iter index_candidate=' + index_candidate + '/' + (candidate.length - 1) + 
+                                        ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
+                                        ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
+            if (res)
+            {
+                if (elem.is_repeatable())
+                {
+
+                } else {
+                    matched[index_regex] += 1;
+                    index_regex += 1;
+                }
+            } else {
+                if (elem.is_optionnal() || matched[index_regex] > 0) // ?/* or (+ and 
+                {
+                    index_regex += 1
+                } else {
+                    break;
+                }
+            }
+        }
+        // Get last none empty
+        let count = 0;
+        for (let i=0; i < matched.length; i++)
+        {
+            count += matched[i];
+            if (matched[i] === 0 && !this.elements[i].is_optionnal())
+            {
+                res = false;
+            }
+        }
+        // at_start is not tested because match search only at the start of the string
+        // this test is only valid because match search only at the start of the string
+        // TODO
+    }
 }
 
 // Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
@@ -496,97 +555,6 @@ Char.EndCode = "<END>";
         return s;
     }
 */
-
-//-----------------------------------------------------------------------------
-// L'ancienne classe Regex à intégrer dans la nouvelle
-//-----------------------------------------------------------------------------
-
-class Regex2
-{
-    check_at(candidate, index)
-    {
-        if (index >= this.elements.length)
-        {
-            throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
-        }
-        return this.elements[index].check(candidate);
-    }
-
-    // Pas de surcharge de [ ] en JavaScript
-    get(index)
-    {
-        return this.elements[index];
-    }
-
-    // Pas de surchage de length en JavaScript
-    size()
-    {
-        return this.elements.length
-    }
-
-    info()
-    {
-
-    }
-
-    is_specific()
-    {
-
-    }
-
-    match(candidate)
-    {
-        if (this.debug)
-        {
-            console.log('    Regex#match ' + this.toString() + ' vs |' + candidate + '|');
-        }
-        let matched = Array(this.elements.length).fill(0);
-        let index_candidate = 0;
-        let index_regex = 0;
-        let final = new Match(this, candidate);
-        let res = true;
-        while (index_candidate < candidate.length && index_regex < this.elements.length)
-        {
-            let elem = this.elements[index_regex];
-            res = this.check_at(candidate[index_candidate], index_regex)
-            if (this.debug)
-            {
-                console.log('        iter index_candidate=' + index_candidate + '/' + (candidate.length - 1) + 
-                                        ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
-                                        ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res)
-            }
-            if (res)
-            {
-                if (elem.is_repeatable())
-                {
-
-                } else {
-                    matched[index_regex] += 1;
-                    index_regex += 1;
-                }
-            } else {
-                if (elem.is_optionnal() || matched[index_regex] > 0) // ?/* or (+ and 
-                {
-                    index_regex += 1
-                } else {
-                    break;
-                }
-            }
-        }
-        // Get last none empty
-        let count = 0;
-        for (let i=0; i < matched.length; i++)
-        {
-            count += matched[i];
-            if (matched[i] === 0 && !this.elements[i].is_optionnal())
-            {
-                res = false;
-            }
-        }
-        // at_start is not tested because match search only at the start of the string
-        // this test is only valid because match search only at the start of the string
-    }
-}
 
 Regex.Positions = [Char.Start, Char.End];
 Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
