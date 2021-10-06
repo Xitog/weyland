@@ -8,10 +8,10 @@
         </script>
         <link href="https://fonts.googleapis.com/css?family=Fira+Sans" rel="stylesheet">
         <style>
-            #main {
+            div {
                 text-align: center;
             }
-            #code {
+            input {
                 width: 60%;
             }
             body {
@@ -23,6 +23,7 @@
                 background-color: lightgray;
                 font-family: 'Fira Sans', sans-serif;
                 padding: 1em;
+                display: none;
             }
             td {
                 border-right: 1px solid black;
@@ -30,15 +31,27 @@
         </style>
     </head>
     <body>
-        <div id="main">
-            <h1>Enter Regex</h1>
-            <input type="text" id="code" name="code" placeholder="Code..." onsubmit="react()">
+        <div>
+            <h1>Test Weyland Regex</h1>
+            <label>Regex : </label>
+            <input type="text" id="regex" name="regex" placeholder="Code...">
             <input type="submit" hidden />
-            <pre id="output"> </pre>
+            <pre id="compile"> </pre>
         </div>
         <table>
             <tr>
                 <td><div id="ana1"></div></td><td><div id="ana2"></div></td><td><div id="ana3"></div></td>
             </tr>
+        </table>
+        <div>
+            <label>Text : </label><input type="text" id="text" name="text" placeholder="Text...">
+            <input type="submit" hidden />
+            <pre id="match"> </pre>
+        </div>
+        <table>
+            <tr>
+                <td><div id="res1"></div></td>
+            </tr>
+        </table>
     </body>
 </html>

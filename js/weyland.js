@@ -4,10 +4,10 @@
  * - min=0 => option
  * - max>1 => repeat
  * Added choice parameter to distinguish between choice [ ] and group ( )
- * 
+ *
  * Added possibility of grouping
  * Added alternative operator |
- * 
+ *
  * Classes + Modifiers + Custom Classes
  * Todo : invert Custom Classes, range in Custom Classes, group, named group, match
  */
@@ -18,19 +18,32 @@
 
 /* Fonctions de démarrage */
 
+let regex = null;
+
 function start()
 {
-    let input = document.getElementById('code');
-    input.addEventListener("keypress", 
+    let regex = document.getElementById('regex');
+    regex.addEventListener("keypress",
         function (event)
         {
             if (event.code === "Enter")
             {
-                react();
+                react('regex');
             }
         }
     );
-    input.value = ' ';
+    regex.value = '';
+    let text = document.getElementById('text');
+    text.addEventListener("keypress",
+        function (event)
+        {
+            if (event.code === "Enter")
+            {
+                react('text');
+            }
+        }
+    );
+    text.value = '';
 }
 
 function explore(tree, regex)
@@ -60,40 +73,66 @@ function explore(tree, regex)
         }
     } else if (regex instanceof Element) {
         // pass
-    } 
+    }
     tree.appendChild(child);
 }
 
-function react()
+function react(type)
 {
-    let input = document.getElementById('code');
-    let output = document.getElementById('output');
-    let ana1 = document.getElementById('ana1');
-    ana1.innerHTML = "";
-    let ana2 = document.getElementById('ana2');
-    ana2.innerHTML = "";
-    let val = input.value.trim();
-    if (val.length === 0)
+    if (type === 'regex')
     {
-        val = " ";
+        let input = document.getElementById('regex');
+        let output = document.getElementById('compile');
+        output.setAttribute('style', 'display: block');
+        let ana1 = document.getElementById('ana1');
+        ana1.innerHTML = "";
+        let ana2 = document.getElementById('ana2');
+        ana2.innerHTML = "";
+        let val = input.value.trim();
+        output.innerText = val;
+        regex = new Regex(val, false);
+        // Get Chars
+        let chars = regex.precompile();
+        let list = document.createElement('ol');
+        for (let i = 0; i < chars.length; i++)
+        {
+            let e = document.createElement('li');
+            e.innerText = chars[i].toString();
+            list.appendChild(e);
+        }
+        ana1.appendChild(list);
+        // Get Regex
+        regex.compile();
+        let tree = document.createElement('ul');
+        explore(tree, regex);
+        ana2.appendChild(tree);
     }
-    output.innerText = val;
-    let regex = new Regex(val, false);
-    // Get Chars
-    let chars = regex.precompile();
-    let list = document.createElement('ol');
-    for (let i = 0; i < chars.length; i++)
+    else if (type === 'text')
     {
-        let e = document.createElement('li');
-        e.innerText = chars[i].toString();
-        list.appendChild(e);
+        let input = document.getElementById('text');
+        let output = document.getElementById('match');
+        output.setAttribute('style', 'display: block');
+        let val = input.value.trim();
+        output.innerText = val;
+        let res1 = document.getElementById('ana1');
+        res1.innerHTML = "";
+
+        if (regex === null)
+        {
+            alert("No regex defined. Please, define a regex first.");
+            return;
+        }
+
+        let result = regex.match(val);
+        if (result === null || result === undefined)
+        {
+            res1.innerText = "No result.";
+        }
+        else
+        {
+            res1.innerText = result.toString();
+        }
     }
-    ana1.appendChild(list);
-    // Get Regex
-    regex.compile();
-    let tree = document.createElement('ul');
-    explore(tree, regex);
-    ana2.appendChild(tree);
 }
 
 //-----------------------------------------------------------------------------
@@ -206,12 +245,12 @@ Element.Latin = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
 'U', 'V', 'W', 'X', 'Y', 'Z'];
 Element.Letters = Element.Latin + [
-                'Á', 'À', 'Â', 'Ä', 'Å', 'Ă', 'Æ', 'Ç', 'É', 'È', 'Ê', 'Ë', 'Í', 'Ì', 'Î', 'Œ', 'Ñ', 
+                'Á', 'À', 'Â', 'Ä', 'Å', 'Ă', 'Æ', 'Ç', 'É', 'È', 'Ê', 'Ë', 'Í', 'Ì', 'Î', 'Œ', 'Ñ',
                 'Ó', 'Ò', 'Ô', 'Ö', 'Ø', 'Ú', 'Ù', 'Û', 'Ü', 'Š', 'Ș', 'Ț', 'Ž', 'ẞ',
-                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 
-                'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 
-                'u', 'v', 'w', 'x', 'y', 'z', 
-                'á', 'à', 'â', 'ä', 'å', 'ă', 'æ', 'ç', 'é', 'è', 'ê', 'ë', 'í', 'ì', 'î', 'œ', 'ñ', 
+                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+                'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+                'u', 'v', 'w', 'x', 'y', 'z',
+                'á', 'à', 'â', 'ä', 'å', 'ă', 'æ', 'ç', 'é', 'è', 'ê', 'ë', 'í', 'ì', 'î', 'œ', 'ñ',
                 'ó', 'ò', 'ô', 'ö', 'ø', 'ú', 'ù', 'û', 'ü', 'š', 'ș', 'ț', 'ž', 'ß'];
 
 //-----------------------------------------------------------------------------
@@ -223,7 +262,7 @@ class Class extends Element
     constructor(type, inverted, elements=null)
     {
         super(type, 1, 1, false);
-        if (type !== Element.Alpha && type !== Element.Digit && type !== Element.AlphaNum 
+        if (type !== Element.Alpha && type !== Element.Digit && type !== Element.AlphaNum
             && type !== Element.Space && type !== Element.Any && type !== Class.Custom)
         {
             throw "A class must be digit, letter, space, word or custom not: |" + type + "|.";
@@ -308,7 +347,7 @@ class Regex extends Element
     precompile()
     {
         // Transformation de la chaîne en une liste de Char : fusion de \x en un seul char (ne compte plus pour 2 !)
-        // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième. 
+        // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième.
         let temp = [];
         let escaped = false;
         for (let i = 0; i < this.value.length; i++)
@@ -408,7 +447,7 @@ class Regex extends Element
                 }
                 this.elements.push(new Class(Class.Custom, inverted, members));
                 console.log(this.elements[this.elements.length-1]);
-                i = end;     
+                i = end;
             }
             // Quantifiers
             else if (current.is(Element.OneOrMore)) // +
@@ -426,7 +465,7 @@ class Regex extends Element
             }
             else
             {
-                this.elements.push(new Element(current.value)); 
+                this.elements.push(new Element(current.value));
             }
         }
         if (this.elements.length === 0)
@@ -450,7 +489,7 @@ class Regex extends Element
                 throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
             }
             res = elem.match(candidate[index_candidate]);
-            console.log('        iter index_candidate=' + index_candidate + '/' + (candidate.length - 1) + 
+            console.log('        iter index_candidate=' + index_candidate + '/' + (candidate.length - 1) +
                                         ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
                                         ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
             if (res)
@@ -463,7 +502,7 @@ class Regex extends Element
                     index_regex += 1;
                 }
             } else {
-                if (elem.is_optionnal() || matched[index_regex] > 0) // ?/* or (+ and 
+                if (elem.is_optionnal() || matched[index_regex] > 0) // ?/* or (+ and
                 {
                     index_regex += 1
                 } else {
