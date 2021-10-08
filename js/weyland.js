@@ -114,15 +114,24 @@ function react(type)
         output.setAttribute('style', 'display: block');
         let val = input.value.trim();
         output.innerText = val;
-        let res1 = document.getElementById('ana1');
+        let res1 = document.getElementById('res1');
         res1.innerHTML = "";
 
-        if (regex === null)
+        let pattern = document.getElementById('regex').value.trim();
+        if (regex === null || pattern !== regex.getPattern())
         {
-            alert("No regex defined. Please, define a regex first.");
-            return;
-        }
 
+            if (pattern.length === 0)
+            {
+                alert("No regex defined. Please, define a regex first.");
+                return;
+            }
+            else
+            {
+                // Refresh the regex definition
+                react("regex");
+            }
+        }
         let result = regex.match(val);
         if (result === null || result === undefined)
         {
@@ -187,6 +196,11 @@ class Element
         this.value = value.replace("\n", Element.NewLineCode)
     }
 
+    getPattern()
+    {
+        return this.value;
+    }
+
     toString()
     {
         let card = "";
@@ -198,12 +212,12 @@ class Element
         return "Element |" + this.value + "|" + card;
     }
 
-    is_optionnal()
+    isOptionnal()
     {
         return this.min === 0;
     }
 
-    is_repeatable()
+    isRepeatable()
     {
         return this.max > 1;
     }
@@ -272,6 +286,14 @@ class Class extends Element
         {
             throw "A custom class must have at least two elements.";
         }
+        if (type !== Class.Custom && elements !== null)
+        {
+            throw "A not custom class must not define elements.";
+        }
+        else if (type !== Class.Custom)
+        {
+            elements = [new Element(type)];
+        }
         this.elements = elements;
     }
 
@@ -294,30 +316,40 @@ class Class extends Element
 
     match(candidate)
     {
-        if (this.type === Element.Alpha)
+        if (this.value === Element.Alpha)
         {
             return Element.Letters.includes(candidate);
-        } else if (this.type === Element.Digit)
+        }
+        else if (this.value === Element.Digit)
         {
             return Element.Digits.includes(candidate);
-        } else if (this.type === Element.AlphaNum)
+        }
+        else if (this.value === Element.AlphaNum)
         {
             return (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
-        } else if (this.type === Element.Space)
+        }
+        else if (this.value === Element.Space)
         {
             return Element.Spaces.includes(candidate);
-        } else if (this.type === Element.Any)
+        }
+        else if (this.value === Element.Any)
         {
             return candidate !== '\n';
-        } else { // Custom
+        }
+        else if (this.value === Class.Custom)
+        {
             for (let e of this.elements)
             {
-                if (e.check(candidate))
+                if (e.match(candidate))
                 {
                     return true;
                 }
             }
             return false;
+        }
+        else
+        {
+            throw "Unknown type for class : " + this.value;
         }
     }
 }
@@ -367,6 +399,36 @@ class Regex extends Element
         return temp;
     }
 
+    compile_basic_classes(current, target)
+    {
+        let res = true;
+        if (current.is(Element.Digit) || current.is_escaped(Element.DigitEscaped))
+        {
+            target.push(new Class(Element.Digit));
+        }
+        else if (current.is(Element.Alpha))
+        {
+            target.push(new Class(Element.Alpha));
+        }
+        else if (current.is(Element.Space) || current.is_escaped(Element.SpaceEscaped))
+        {
+            target.push(new Class(Element.Space));
+        }
+        else if (current.is(Element.AlphaNum) || current.is_escaped(Element.AlphaNumEscaped))
+        {
+            target.push(new Class(Element.AlphaNum));
+        }
+        else if (current.is(Element.Any))
+        {
+            target.push(new Class(Element.Any));
+        }
+        else
+        {
+            res = false; // not a class
+        }
+        return res;
+    }
+
     compile()
     {
         let temp = this.precompile();
@@ -398,24 +460,9 @@ class Regex extends Element
             let current = temp[i];
             let prev = (this.elements.length > 0) ? this.elements[this.elements.length-1] : null;
             // Classes
-            if (current.is(Element.Digit) || current.is_escaped(Element.DigitEscaped))
+            if (this.compile_basic_classes(current, this.elements))
             {
-                this.elements.push(new Class(Element.Digit));
-            }
-            else if (current.is(Element.Alpha))
-            {
-                this.elements.push(new Class(Element.Alpha));
-            }
-            else if (current.is(Element.Space) || current.is_escaped(Element.SpaceEscaped))
-            {
-                this.elements.push(new Class(Element.Space));
-            }
-            else if (current.is(Element.AlphaNum) || current.is_escaped(Element.AlphaNumEscaped))
-            {
-                this.elements.push(new Class(Element.AlphaNum));
-            } else if (current.is(Element.Any))
-            {
-                this.element.push(new Class(Element.Any));
+                // everything is done in the function, do nothing here.
             }
             // Custom classes
             else if (current.is(Element.OpenClass))
@@ -433,7 +480,13 @@ class Regex extends Element
                     {
                         end = j;
                         break;
-                    } else {
+                    }
+                    else if (this.compile_basic_classes(temp[j], members))
+                    {
+                        // everything is done in the function, do nothing here.
+                    }
+                    else
+                    {
                         members.push(new Element(temp[j].value));
                     }
                 }
@@ -446,7 +499,7 @@ class Regex extends Element
                     throw "A custom class must have at least 2 elements."
                 }
                 this.elements.push(new Class(Class.Custom, inverted, members));
-                console.log(this.elements[this.elements.length-1]);
+                //console.log(this.elements[this.elements.length-1]);
                 i = end;
             }
             // Quantifiers
@@ -494,32 +547,45 @@ class Regex extends Element
                                         ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
             if (res)
             {
-                if (elem.is_repeatable())
+                //console.log(res);
+                matched[index_regex] += 1;
+                if (!elem.isRepeatable())
                 {
-
-                } else {
-                    matched[index_regex] += 1;
                     index_regex += 1;
                 }
-            } else {
-                if (elem.is_optionnal() || matched[index_regex] > 0) // ?/* or (+ and
+            }
+            else
+            {
+                if (elem.isOptionnal() || matched[index_regex] > 0) // ?/* or (+ and
                 {
                     index_regex += 1
-                } else {
+                }
+                else
+                {
                     break;
                 }
             }
+            index_candidate += 1;
         }
-        // Get last none empty
+
+        console.log('End of loop: ', index_candidate);
+        final.match = res;
+        final.length = index_candidate;
+        //this.partial = false;       // In case of not matching, is it due to not enough chars?
+        //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
+        return final;
+        // Get number of chars matched
+        /*
         let count = 0;
         for (let i=0; i < matched.length; i++)
         {
             count += matched[i];
-            if (matched[i] === 0 && !this.elements[i].is_optionnal())
+            if (matched[i] === 0 && !this.elements[i].isOptionnal())
             {
                 res = false;
             }
         }
+        */
         // at_start is not tested because match search only at the start of the string
         // this test is only valid because match search only at the start of the string
         // TODO
@@ -644,9 +710,9 @@ class Match
         return this.match;
     }
 
-    get_match()
+    getMatch()
     {
-        return ((this.length === null ? '' : this.text.substring(0, this.length - 1)));
+        return ((this.length === null ? '' : this.text.substring(0, this.length)));
     }
 
     is_overload()
@@ -686,9 +752,9 @@ class Match
     {
         if (this.match)
         {
-            return '<Match matched |' + this.get_match() + '|>';
+            return '<Match matched |' + this.getMatch() + '|>';
         } else if (this.partial) {
-            return '<Match partial |' + this.get_match() + '|>';
+            return '<Match partial |' + this.getMatch() + '|>';
         } else {
             return '<Match none>';
         }
