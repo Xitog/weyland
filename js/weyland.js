@@ -80,7 +80,8 @@ function explore(tree, regex)
 
 function react(type)
 {
-<<<<<<< HEAD
+    console.clear();
+
     let regex = null;
 
     // Clean
@@ -90,32 +91,20 @@ function react(type)
     ana2.innerHTML = "";
     let res1 = document.getElementById('res1');
     res1.innerHTML = "";
+    let res2 = document.getElementById('res2');
+    res2.innerHTML = "";
 
     // Get info
     let pattern = document.getElementById('regex').value.trim();
     let text = document.getElementById('text').value.trim();
 
     if (pattern !== "")
-=======
-    // si la regex change et que le texte n'est pas null, il doit être rématché
-    if (type === 'regex')
->>>>>>> 4a63959753113abdc614896c691042131473ca81
     {
         let output = document.getElementById('compile');
         output.setAttribute('style', 'display: block');
-<<<<<<< HEAD
 
-        regex = new Regex(pattern, false);
+        regex = new Regex(pattern, null, false);
 
-=======
-        let ana1 = document.getElementById('ana1');
-        ana1.innerHTML = "";
-        let ana2 = document.getElementById('ana2');
-        ana2.innerHTML = "";
-        let val = input.value.trim();
-        output.innerText = val;
-        regex = new Regex(val, null, false); // pattern, parent, autocompile
->>>>>>> 4a63959753113abdc614896c691042131473ca81
         // Get Chars
         let chars = regex.precompile();
         let list = document.createElement('ol');
@@ -152,6 +141,15 @@ function react(type)
         else
         {
             res1.innerText = result.toString();
+
+            let list = document.createElement('ol');
+            for (let i = 0; i < result.size(); i++)
+            {
+                let e = document.createElement('li');
+                e.innerText = result.get(i).toString();
+                list.appendChild(e);
+            }
+            res2.appendChild(list);
         }
     }
 }
@@ -213,6 +211,11 @@ class Element
         return this.value;
     }
 
+    setLazy()
+    {
+        this.greedy = false;
+    }
+
     toString()
     {
         let card = "";
@@ -220,6 +223,7 @@ class Element
         {
             let max = (this.max === -1) ? "*" : this.max;
             card = " {" + this.min + ", " + max + "}";
+            card += (this.greedy) ? ' greedy' : ' lazy';
         }
         return "Element |" + this.value + "|" + card;
     }
@@ -234,16 +238,47 @@ class Element
         return this.max > 1;
     }
 
-    match(candidate)
+    match_one(candidate)
     {
-        if (candidate === this.value)
+        return (candidate === this.value);
+    }
+
+    match(candidate, start, stop=null, next=null, level=0)
+    {
+        if (stop === null)
         {
-            return 1;
+            stop = candidate.length;
         }
-        else
+        let matched = 0;
+        console.log('    '.repeat(level) + 'Start Element#match loop with : ', candidate, ', ', start, ', ',
+                    stop, ', |', candidate[start], '| vs ', this.value, ', min=', this.min, ', max=', this.max);
+        let notbreak = true;
+        for (let i = start; i < stop && matched< this.max && notbreak; i++)
         {
-            return 0;
+            let res = this.match_one(candidate[i]);
+            if (!res)
+            {
+                notbreak = false;
+            }
+            else if (this.greedy || this.next === null || matched < this.min)
+            {
+                matched += 1;
+            }
+            else // res ok, not greedy => we must try if the next Element is ok and if it is stop
+            {
+                let next_res = next.match(candidate, i, stop, null, level + 1);
+                if (next_res[0])
+                {
+                    notbreak = false;
+                }
+                else
+                {
+                    matched += 1;
+                }
+            }
+            console.log('    '.repeat(level) + '( candidate[i=' + i + ']=' + candidate[i] + ' vs ' + this.value + ' ) res=' + res + ' matched=' + matched + ' notbreak=' + notbreak);
         }
+        return [matched >= this.min, matched];
     }
 }
 // Classes
@@ -261,7 +296,7 @@ Element.CloseClass = ']';
 Element.InvertClass = '^';
 Element.RangeClass = '-';
 // Quantifiers
-Element.ZeroOrOne = '?';
+Element.ZeroOrOne = '?'; // Can be lazy too
 Element.OneOrMore = '+';
 Element.ZeroOrMore = '*';
 // Group
@@ -333,28 +368,27 @@ class Class extends Element
         return "Class |" + this.value + "|" + card + nb + inverted;
     }
 
-    match(candidate)
+    match_one(candidate)
     {
-        let res = false;
         if (this.value === Element.Alpha)
         {
-            res = Element.Letters.includes(candidate);
+            return Element.Letters.includes(candidate);
         }
         else if (this.value === Element.Digit)
         {
-            res =  Element.Digits.includes(candidate);
+            return Element.Digits.includes(candidate);
         }
         else if (this.value === Element.AlphaNum)
         {
-            res = (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
+            return (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
         }
         else if (this.value === Element.Space)
         {
-            res = Element.Spaces.includes(candidate);
+            return Element.Spaces.includes(candidate);
         }
         else if (this.value === Element.Any)
         {
-            res = candidate !== '\n';
+            return (candidate !== '\n');
         }
         else if (this.value === Class.Custom)
         {
@@ -362,22 +396,13 @@ class Class extends Element
             {
                 if (e.match(candidate))
                 {
-                    res = true;
-                    break;
+                    return true;
                 }
             }
         }
         else
         {
             throw "Unknown type for class : " + this.value;
-        }
-        if (res)
-        {
-            return 1;
-        }
-        else
-        {
-            return 0;
         }
     }
 }
@@ -534,16 +559,24 @@ class Regex extends Element
             // Quantifiers
             else if (current.is(Element.OneOrMore)) // +
             {
-                prev.max = -1;
+                prev.max = Infinity;
             }
             else if (current.is(Element.ZeroOrMore)) // *
             {
                 prev.min = 0;
-                prev.max = -1;
+                prev.max = Infinity;
             }
             else if (current.is(Element.ZeroOrOne)) // ?
             {
-                prev.min = 0;
+                // There was a previous modifier, this one is making it lazy
+                if (prev.min !== 1 || prev.max !== 1)
+                {
+                    prev.setLazy();
+                }
+                else
+                {
+                    prev.min = 0;
+                }
             }
             else
             {
@@ -556,17 +589,17 @@ class Regex extends Element
         }
     }
 
-    match(candidate, start=0, stop=null)
+    match(candidate, start=0, stop=null, next=null, level=0)
     {
         if (stop === null)
         {
             stop = candidate.length;
         }
+        // Regex is not an atomic Element but a list of Elements so matched is now an array instead of a single value
         let matched = Array(this.elements.length).fill(0);
         let index_candidate = start;
         let index_regex = 0;
-        let final = new Match(this, candidate);
-        let res = true;
+
         while (index_candidate < stop && index_regex < this.elements.length)
         {
             let elem = this.elements[index_regex];
@@ -574,63 +607,46 @@ class Regex extends Element
             {
                 throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
             }
-            res = elem.match(candidate[index_candidate]);
-            console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
-                                        ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
-                                        ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
-            if (res === 1)
+            let next = (index_regex + 1 < this.elements.length) ? this.elements[index_regex + 1] : null;
+            let res = elem.match(candidate, index_candidate, stop, next);
+            //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
+            //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
+            //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
+            if (res[0] === true)
             {
-                //console.log(res);
-                matched[index_regex] += 1;
-                if (!elem.isRepeatable())
-                {
-                    index_regex += 1;
-                }
+                matched[index_regex] += res[1];
             }
             else
             {
-                if (elem.isOptionnal() || matched[index_regex] > 0) // ?/* or (+ and
-                {
-                    index_regex += 1
-                }
-                else
+                if (!elem.isOptionnal())
                 {
                     break;
                 }
             }
-            index_candidate += 1;
+            index_regex += 1;
+            index_candidate += res[1];
         }
-        console.log('End of loop: ', index_candidate);
+        console.log('End of loop: icandidate=', index_candidate, ' iregex=', index_regex, 'lregex=', this.elements.length, ' parent=', this.parent);
+        let final_res = (index_regex === this.elements.length);
         if (this.parent !== null)
         {
-            if (res)
+            if (final_res)
             {
-                return 1;
+                return [final_res, matched.reduce((a, b) => a + b, 0)];
             }
             else
             {
-                return 0;
+                return [final_res, 0];
             }
         }
         else
         {
-            final.match = res;
+            let final = new Match(this, candidate);
+            final.match = final_res;
             final.length = index_candidate;
+            final.element_matches = matched; // Length of candidate text matched for each elements of the Regex
             //this.partial = false;       // In case of not matching, is it due to not enough chars?
-            //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
             return final;
-            // Get number of chars matched
-            /*
-            let count = 0;
-            for (let i=0; i < matched.length; i++)
-            {
-                count += matched[i];
-                if (matched[i] === 0 && !this.elements[i].isOptionnal())
-                {
-                    res = false;
-                }
-            }
-            */
             // at_start is not tested because match search only at the start of the string
             // this test is only valid because match search only at the start of the string
             // TODO
@@ -756,6 +772,15 @@ class Match
         return this.match;
     }
 
+    get(index)
+    {
+        if (index < 0 || index >= this.element_matches.length)
+        {
+            throw "Out of range index: " + index + " should be between 0 and " + this.element_matches.length;
+        }
+        return this.element_matches[index];
+    }
+
     getMatch()
     {
         return ((this.length === null ? '' : this.text.substring(0, this.length)));
@@ -798,7 +823,7 @@ class Match
     {
         if (this.match)
         {
-            return '<Match matched |' + this.getMatch() + '|>';
+            return '<Match matched |' + this.getMatch() + '| (' + 0 + ' to ' + (this.length - 1) + ')>';
         } else if (this.partial) {
             return '<Match partial |' + this.getMatch() + '|>';
         } else {
