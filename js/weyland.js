@@ -19,6 +19,7 @@
 /* Fonctions de démarrage */
 
 let regex = null;
+let last_text = null;
 
 function start()
 {
@@ -79,18 +80,27 @@ function explore(tree, regex)
 
 function react(type)
 {
-    if (type === 'regex')
+    let regex = null;
+
+    // Clean
+    let ana1 = document.getElementById('ana1');
+    ana1.innerHTML = "";
+    let ana2 = document.getElementById('ana2');
+    ana2.innerHTML = "";
+    let res1 = document.getElementById('res1');
+    res1.innerHTML = "";
+
+    // Get info
+    let pattern = document.getElementById('regex').value.trim();
+    let text = document.getElementById('text').value.trim();
+
+    if (pattern !== "")
     {
-        let input = document.getElementById('regex');
         let output = document.getElementById('compile');
         output.setAttribute('style', 'display: block');
-        let ana1 = document.getElementById('ana1');
-        ana1.innerHTML = "";
-        let ana2 = document.getElementById('ana2');
-        ana2.innerHTML = "";
-        let val = input.value.trim();
-        output.innerText = val;
-        regex = new Regex(val, false);
+
+        regex = new Regex(pattern, false);
+
         // Get Chars
         let chars = regex.precompile();
         let list = document.createElement('ol');
@@ -107,32 +117,19 @@ function react(type)
         explore(tree, regex);
         ana2.appendChild(tree);
     }
-    else if (type === 'text')
+
+    if (text !== "")
     {
-        let input = document.getElementById('text');
+        if (type === "text" && regex === null)
+        {
+            alert("No regex defined. Please, define a regex first.");
+            return;
+        }
+
         let output = document.getElementById('match');
         output.setAttribute('style', 'display: block');
-        let val = input.value.trim();
-        output.innerText = val;
-        let res1 = document.getElementById('res1');
-        res1.innerHTML = "";
 
-        let pattern = document.getElementById('regex').value.trim();
-        if (regex === null || pattern !== regex.getPattern())
-        {
-
-            if (pattern.length === 0)
-            {
-                alert("No regex defined. Please, define a regex first.");
-                return;
-            }
-            else
-            {
-                // Refresh the regex definition
-                react("regex");
-            }
-        }
-        let result = regex.match(val);
+        let result = regex.match(text);
         if (result === null || result === undefined)
         {
             res1.innerText = "No result.";
