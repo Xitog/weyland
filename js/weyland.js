@@ -80,6 +80,7 @@ function explore(tree, regex)
 
 function react(type)
 {
+<<<<<<< HEAD
     let regex = null;
 
     // Clean
@@ -95,12 +96,26 @@ function react(type)
     let text = document.getElementById('text').value.trim();
 
     if (pattern !== "")
+=======
+    // si la regex change et que le texte n'est pas null, il doit être rématché
+    if (type === 'regex')
+>>>>>>> 4a63959753113abdc614896c691042131473ca81
     {
         let output = document.getElementById('compile');
         output.setAttribute('style', 'display: block');
+<<<<<<< HEAD
 
         regex = new Regex(pattern, false);
 
+=======
+        let ana1 = document.getElementById('ana1');
+        ana1.innerHTML = "";
+        let ana2 = document.getElementById('ana2');
+        ana2.innerHTML = "";
+        let val = input.value.trim();
+        output.innerText = val;
+        regex = new Regex(val, null, false); // pattern, parent, autocompile
+>>>>>>> 4a63959753113abdc614896c691042131473ca81
         // Get Chars
         let chars = regex.precompile();
         let list = document.createElement('ol');
@@ -221,7 +236,14 @@ class Element
 
     match(candidate)
     {
-        return (candidate === this.value);
+        if (candidate === this.value)
+        {
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
     }
 }
 // Classes
@@ -313,25 +335,26 @@ class Class extends Element
 
     match(candidate)
     {
+        let res = false;
         if (this.value === Element.Alpha)
         {
-            return Element.Letters.includes(candidate);
+            res = Element.Letters.includes(candidate);
         }
         else if (this.value === Element.Digit)
         {
-            return Element.Digits.includes(candidate);
+            res =  Element.Digits.includes(candidate);
         }
         else if (this.value === Element.AlphaNum)
         {
-            return (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
+            res = (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
         }
         else if (this.value === Element.Space)
         {
-            return Element.Spaces.includes(candidate);
+            res = Element.Spaces.includes(candidate);
         }
         else if (this.value === Element.Any)
         {
-            return candidate !== '\n';
+            res = candidate !== '\n';
         }
         else if (this.value === Class.Custom)
         {
@@ -339,14 +362,22 @@ class Class extends Element
             {
                 if (e.match(candidate))
                 {
-                    return true;
+                    res = true;
+                    break;
                 }
             }
-            return false;
         }
         else
         {
             throw "Unknown type for class : " + this.value;
+        }
+        if (res)
+        {
+            return 1;
+        }
+        else
+        {
+            return 0;
         }
     }
 }
@@ -358,10 +389,11 @@ Class.Custom = 'Custom';
 
 class Regex extends Element
 {
-    constructor(pattern, autocompile=true)
+    constructor(pattern, parent=null, autocompile=true)
     {
         super(pattern, 1, 1, false);
         this.elements = [];
+        this.parent = parent;
         if (autocompile)
         {
             this.compile();
@@ -524,14 +556,18 @@ class Regex extends Element
         }
     }
 
-    match(candidate)
+    match(candidate, start=0, stop=null)
     {
+        if (stop === null)
+        {
+            stop = candidate.length;
+        }
         let matched = Array(this.elements.length).fill(0);
-        let index_candidate = 0;
+        let index_candidate = start;
         let index_regex = 0;
         let final = new Match(this, candidate);
         let res = true;
-        while (index_candidate < candidate.length && index_regex < this.elements.length)
+        while (index_candidate < stop && index_regex < this.elements.length)
         {
             let elem = this.elements[index_regex];
             if (index_regex >= this.elements.length)
@@ -539,10 +575,10 @@ class Regex extends Element
                 throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
             }
             res = elem.match(candidate[index_candidate]);
-            console.log('        iter index_candidate=' + index_candidate + '/' + (candidate.length - 1) +
+            console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
                                         ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
                                         ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
-            if (res)
+            if (res === 1)
             {
                 //console.log(res);
                 matched[index_regex] += 1;
@@ -564,28 +600,41 @@ class Regex extends Element
             }
             index_candidate += 1;
         }
-
         console.log('End of loop: ', index_candidate);
-        final.match = res;
-        final.length = index_candidate;
-        //this.partial = false;       // In case of not matching, is it due to not enough chars?
-        //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
-        return final;
-        // Get number of chars matched
-        /*
-        let count = 0;
-        for (let i=0; i < matched.length; i++)
+        if (this.parent !== null)
         {
-            count += matched[i];
-            if (matched[i] === 0 && !this.elements[i].isOptionnal())
+            if (res)
             {
-                res = false;
+                return 1;
+            }
+            else
+            {
+                return 0;
             }
         }
-        */
-        // at_start is not tested because match search only at the start of the string
-        // this test is only valid because match search only at the start of the string
-        // TODO
+        else
+        {
+            final.match = res;
+            final.length = index_candidate;
+            //this.partial = false;       // In case of not matching, is it due to not enough chars?
+            //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
+            return final;
+            // Get number of chars matched
+            /*
+            let count = 0;
+            for (let i=0; i < matched.length; i++)
+            {
+                count += matched[i];
+                if (matched[i] === 0 && !this.elements[i].isOptionnal())
+                {
+                    res = false;
+                }
+            }
+            */
+            // at_start is not tested because match search only at the start of the string
+            // this test is only valid because match search only at the start of the string
+            // TODO
+        }
     }
 }
 
