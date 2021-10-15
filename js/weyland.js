@@ -103,7 +103,7 @@ function react(type)
         let output = document.getElementById('compile');
         output.setAttribute('style', 'display: block');
 
-        regex = new Regex(pattern, null, false);
+        regex = new Regex(pattern, false);
 
         // Get Chars
         let chars = regex.precompile();
@@ -197,12 +197,13 @@ class Char
 
 class Element
 {
-    constructor(value, min=1, max=1, greedy=true)
+    constructor(value, parent=null)
     {
         this.value = value;
-        this.min = min;
-        this.max = max;
-        this.greedy = greedy;
+        this.parent = parent;
+        this.min = 1;
+        this.max = 1;
+        this.quantifier = Element.Normal;
         this.value = value.replace("\n", Element.NewLineCode)
     }
 
@@ -211,9 +212,18 @@ class Element
         return this.value;
     }
 
-    setLazy()
+    setQuantifier(qt)
     {
-        this.greedy = false;
+        if (qt !== Element.Normal && qt !== Element.Greedy && qt !== Element.Lazy && qt !== Element.Possessive)
+        {
+            throw "Quantifier not known: " + qt;
+        }
+        this.quantifier = qt;
+    }
+
+    getQuantifier()
+    {
+        return this.quantifier;
     }
 
     toString()
@@ -223,9 +233,25 @@ class Element
         {
             let max = (this.max === -1) ? "*" : this.max;
             card = " {" + this.min + ", " + max + "}";
-            card += (this.greedy) ? ' greedy' : ' lazy';
+            switch (this.quantifier)
+            {
+                case Element.Greedy:
+                    card += ' greedy';
+                    break;
+                case Element.Lazy:
+                    card += ' lazy';
+                    break;
+                case Element.Possessive:
+                    card += ' possessive';
+                    break;
+            }
         }
         return "Element |" + this.value + "|" + card;
+    }
+
+    info(level=0, prefix='')
+    {
+        return '   '.repeat(level) + prefix + this.toString();
     }
 
     isOptionnal()
@@ -238,48 +264,32 @@ class Element
         return this.max > 1;
     }
 
-    match_one(candidate)
+    setCard(min, max)
     {
+        if (min > max)
+        {
+            throw "Max cardinality must be superior or equal to min cardinality";
+        }
+        this.min = min;
+        this.max = max;
+    }
+
+    getMin()
+    {
+        return this.min;
+    }
+
+    getMax()
+    {
+        return this.max;
+    }
+
+    match(candidate)
+    {
+        console.log('Element#match:', candidate, 'vs', this.value, candidate === this.value);
         return (candidate === this.value);
     }
 
-    match(candidate, start, stop=null, next=null, level=0)
-    {
-        if (stop === null)
-        {
-            stop = candidate.length;
-        }
-        let matched = 0;
-        console.log('    '.repeat(level) + 'Start Element#match loop with : ', candidate, ', ', start, ', ',
-                    stop, ', |', candidate[start], '| vs ', this.value, ', min=', this.min, ', max=', this.max);
-        let notbreak = true;
-        for (let i = start; i < stop && matched< this.max && notbreak; i++)
-        {
-            let res = this.match_one(candidate[i]);
-            if (!res)
-            {
-                notbreak = false;
-            }
-            else if (this.greedy || this.next === null || matched < this.min)
-            {
-                matched += 1;
-            }
-            else // res ok, not greedy => we must try if the next Element is ok and if it is stop
-            {
-                let next_res = next.match(candidate, i, stop, null, level + 1);
-                if (next_res[0])
-                {
-                    notbreak = false;
-                }
-                else
-                {
-                    matched += 1;
-                }
-            }
-            console.log('    '.repeat(level) + '( candidate[i=' + i + ']=' + candidate[i] + ' vs ' + this.value + ' ) res=' + res + ' matched=' + matched + ' notbreak=' + notbreak);
-        }
-        return [matched >= this.min, matched];
-    }
 }
 // Classes
 Element.Alpha = '@';
@@ -299,6 +309,10 @@ Element.RangeClass = '-';
 Element.ZeroOrOne = '?'; // Can be lazy too
 Element.OneOrMore = '+';
 Element.ZeroOrMore = '*';
+Element.Normal = 0;
+Element.Greedy = 1;
+Element.Lazy = 2;
+Element.Possessive = 3;
 // Group
 Element.CloseGroup = ')';
 // Others
@@ -327,9 +341,9 @@ Element.Letters = Element.Latin + [
 
 class Class extends Element
 {
-    constructor(type, inverted, elements=null)
+    constructor(type, parent=null, inverted=false, elements=null)
     {
-        super(type, 1, 1, false);
+        super(type, parent, 1, 1, false);
         if (type !== Element.Alpha && type !== Element.Digit && type !== Element.AlphaNum
             && type !== Element.Space && type !== Element.Any && type !== Class.Custom)
         {
@@ -368,7 +382,12 @@ class Class extends Element
         return "Class |" + this.value + "|" + card + nb + inverted;
     }
 
-    match_one(candidate)
+    info(level=0, prefix='')
+    {
+        return '    '.repeat(level) + prefix + this.toString();
+    }
+
+    match(candidate)
     {
         if (this.value === Element.Alpha)
         {
@@ -409,16 +428,160 @@ class Class extends Element
 Class.Custom = 'Custom';
 
 //-----------------------------------------------------------------------------
+// Sequence
+//-----------------------------------------------------------------------------
+
+class Sequence extends Element
+{
+
+    constructor(value, parent=null)
+    {
+        super(value, parent);
+        this.elements = [];
+    }
+
+    add(element)
+    {
+        this.elements.push(element);
+    }
+
+    last()
+    {
+        return ((this.elements.length > 0) ? this.elements[this.elements.length - 1] : null);
+    }
+
+    info(level=0, prefix='')
+    {
+        let s = '    '.repeat(level) + this.toString() + "\n";
+        for (let i = 0; i < this.elements.length; i++)
+        {
+            s +=  this.elements[i].info(level + 1, i.toString().padStart(2, '0') + '. ') + "\n";
+        }
+        return s;
+    }
+
+    size()
+    {
+        return this.elements.length;
+    }
+
+    toString()
+    {
+        return 'Sequence |' + this.value + '| (' + this.elements.length + ')';
+    }
+
+    match(candidate, start=0, stop=null)
+    {
+        if (stop == null)
+        {
+            stop = candidate.length;
+        }
+        // Regex is not an atomic Element but a list of Elements so matched is now an array instead of a single value
+        let matched = Array(this.elements.length).fill(0);
+        let index_candidate = start;
+        let index_regex = 0;
+        while (index_candidate < stop && index_regex < this.elements.length)
+        {
+            let elem = this.elements[index_regex];
+            if (index_regex >= this.elements.length)
+            {
+                throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
+            }
+            let next = (index_regex + 1 < this.elements.length) ? this.elements[index_regex + 1] : null;
+            let res = elem.match(candidate[index_candidate]);
+            //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
+            //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
+            //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
+            if (res === true)
+            {
+                matched[index_regex] += res[1];
+            }
+            else
+            {
+                if (!elem.isOptionnal())
+                {
+                    break;
+                }
+            }
+            index_regex += 1;
+            index_candidate += 1;
+        }
+        console.log('End of loop: icandidate=', index_candidate, ' iregex=', index_regex, 'lregex=', this.elements.length, ' parent=', this.parent);
+        let final_res = (index_regex === this.elements.length);
+        if (this.parent !== null)
+        {
+            if (final_res)
+            {
+                return [final_res, matched.reduce((a, b) => a + b, 0)];
+            }
+            else
+            {
+                return [final_res, 0];
+            }
+        }
+        else
+        {
+            let final = new Match(this, candidate);
+            final.match = final_res;
+            final.length = index_candidate;
+            final.element_matches = matched; // Length of candidate text matched for each elements of the Regex
+            //this.partial = false;       // In case of not matching, is it due to not enough chars?
+            return final;
+        }
+    }
+}
+
+/*
+match(candidate, start, stop=null, next=null, level=0)
+{
+    if (stop === null)
+    {
+        stop = candidate.length;
+    }
+    let matched = 0;
+    console.log('    '.repeat(level) + 'Start Element#match loop with : ', candidate, ', ', start, ', ',
+                stop, ', |', candidate[start], '| vs ', this.value, ', min=', this.min, ', max=', this.max);
+    let notbreak = true;
+    for (let i = start; i < stop && matched< this.max && notbreak; i++)
+    {
+        let res = this.match_one(candidate[i]);
+        if (!res)
+        {
+            notbreak = false;
+        }
+        else if (this.greedy || this.next === null || matched < this.min)
+        {
+            matched += 1;
+        }
+        else // res ok, not greedy => we must try if the next Element is ok and if it is stop
+        {
+            let next_res = next.match(candidate, i, stop, null, level + 1);
+            if (next_res[0])
+            {
+                notbreak = false;
+            }
+            else
+            {
+                matched += 1;
+            }
+        }
+        console.log('    '.repeat(level) + '( candidate[i=' + i + ']=' + candidate[i] + ' vs ' + this.value + ' ) res=' + res + ' matched=' + matched + ' notbreak=' + notbreak);
+    }
+    return [matched >= this.min, matched];
+}
+*/
+
+//-----------------------------------------------------------------------------
 // La classe Regex
 //-----------------------------------------------------------------------------
 
-class Regex extends Element
+class Regex
 {
-    constructor(pattern, parent=null, autocompile=true)
+    constructor(pattern, autocompile=true)
     {
-        super(pattern, 1, 1, false);
-        this.elements = [];
-        this.parent = parent;
+        this.raw = pattern;
+        this.pattern = pattern.replace('\n', '\\n');
+        this.root = null;
         if (autocompile)
         {
             this.compile();
@@ -427,7 +590,12 @@ class Regex extends Element
 
     toString()
     {
-        return 'Regex |' + this.value + '| (' + this.elements.length.toString() + ')';
+        return 'Regex |' + this.pattern + '|';
+    }
+
+    info()
+    {
+        return this.root.info();
     }
 
     precompile()
@@ -436,19 +604,20 @@ class Regex extends Element
         // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième.
         let temp = [];
         let escaped = false;
-        for (let i = 0; i < this.value.length; i++)
+        for (let i = 0; i < this.raw.length; i++)
         {
-            if (this.value[i] === "\\" && !escaped)
+            let current = this.raw[i];
+            if (current === "\\" && !escaped)
             {
                 escaped = true;
             } else {
-                temp.push(new Char(this.value[i], escaped));
+                temp.push(new Char(current, escaped));
                 escaped = false;
             }
         }
         if (escaped) // Si on finit par un \ on le met mais ça ne passera pas les checks
         {
-            temp.push(new Char(this.value[this.value.length-1], false));
+            temp.push(new Char(this.raw[this.raw.length-1], false));
         }
         return temp;
     }
@@ -486,7 +655,7 @@ class Regex extends Element
     compile()
     {
         let temp = this.precompile();
-        this.elements = [];
+        this.root = new Sequence(this.pattern);
         // Checks
         if (temp.length === 0)
         {
@@ -512,7 +681,7 @@ class Regex extends Element
         for (let i = 0; i < temp.length; i++)
         {
             let current = temp[i];
-            let prev = (this.elements.length > 0) ? this.elements[this.elements.length-1] : null;
+            let prev = this.root.last();
             // Classes
             if (this.compile_basic_classes(current, this.elements))
             {
@@ -559,98 +728,50 @@ class Regex extends Element
             // Quantifiers
             else if (current.is(Element.OneOrMore)) // +
             {
-                prev.max = Infinity;
+                // There was a previous modifier, this one is making it possessive
+                if (prev.min !== 1 || prev.max !== 1)
+                {
+                    prev.setQuantifier(Element.Possessive);
+                }
+                else
+                {
+                    prev.max = Infinity;
+                    prev.setQuantifier(Element.Greedy);
+                }
             }
             else if (current.is(Element.ZeroOrMore)) // *
             {
                 prev.min = 0;
                 prev.max = Infinity;
+                prev.setQuantifier(Element.Greedy);
             }
             else if (current.is(Element.ZeroOrOne)) // ?
             {
                 // There was a previous modifier, this one is making it lazy
                 if (prev.min !== 1 || prev.max !== 1)
                 {
-                    prev.setLazy();
+                    prev.setQuantifier(Element.Lazy);
                 }
                 else
                 {
                     prev.min = 0;
+                    prev.setQuantifier(Element.Greedy);
                 }
             }
             else
             {
-                this.elements.push(new Element(current.value));
+                this.root.add(new Element(current.value));
             }
         }
-        if (this.elements.length === 0)
+        if (this.root.size() === 0)
         {
             throw "Impossible to have a regex with 0 element.";
         }
     }
 
-    match(candidate, start=0, stop=null, next=null, level=0)
+    match(text)
     {
-        if (stop === null)
-        {
-            stop = candidate.length;
-        }
-        // Regex is not an atomic Element but a list of Elements so matched is now an array instead of a single value
-        let matched = Array(this.elements.length).fill(0);
-        let index_candidate = start;
-        let index_regex = 0;
-
-        while (index_candidate < stop && index_regex < this.elements.length)
-        {
-            let elem = this.elements[index_regex];
-            if (index_regex >= this.elements.length)
-            {
-                throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
-            }
-            let next = (index_regex + 1 < this.elements.length) ? this.elements[index_regex + 1] : null;
-            let res = elem.match(candidate, index_candidate, stop, next);
-            //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
-            //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
-            //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
-            if (res[0] === true)
-            {
-                matched[index_regex] += res[1];
-            }
-            else
-            {
-                if (!elem.isOptionnal())
-                {
-                    break;
-                }
-            }
-            index_regex += 1;
-            index_candidate += res[1];
-        }
-        console.log('End of loop: icandidate=', index_candidate, ' iregex=', index_regex, 'lregex=', this.elements.length, ' parent=', this.parent);
-        let final_res = (index_regex === this.elements.length);
-        if (this.parent !== null)
-        {
-            if (final_res)
-            {
-                return [final_res, matched.reduce((a, b) => a + b, 0)];
-            }
-            else
-            {
-                return [final_res, 0];
-            }
-        }
-        else
-        {
-            let final = new Match(this, candidate);
-            final.match = final_res;
-            final.length = index_candidate;
-            final.element_matches = matched; // Length of candidate text matched for each elements of the Regex
-            //this.partial = false;       // In case of not matching, is it due to not enough chars?
-            return final;
-            // at_start is not tested because match search only at the start of the string
-            // this test is only valid because match search only at the start of the string
-            // TODO
-        }
+        return this.root.match(text);
     }
 }
 
@@ -671,57 +792,6 @@ Char.SeparatorRepeat = ',';
 
 Char.StartCode = "<START>";
 Char.EndCode = "<END>";
-
-/*
-    check(candidate)
-    {
-        let res = false;
-        if (this.is_choice()) // Invalid now
-        {
-            for (let sub_elem in self.core)
-            {
-                res = sub_elem.check(candidate);
-                if (res)
-                {
-                    break;
-                }
-            }
-
-            if (this.core === Element.Alpha)
-            {
-                res = (Element.Letters.includes(candidate));
-            } else if (this.core === Element.Digit) {
-                res = (Element.Digits.includes(candidate));
-            } else if (this.core === Element.AlphaNum) {
-                res = (Element.Letters.includes(candidate) || Element.Digits.includes(candidate));
-            } else if (this.core === Element.Any) {
-                res = (candidate !== '\n');
-            } else if (this.core === Element.Start) {
-                res = (candidate === '<START>');
-            } else if (this.core === Element.End) {
-                res = (candidate === '<END>');
-            }
-    }
-
-    display(level=0)
-    {
-        let val = (this.value === null) ? "" : this.value.toString();
-        let label = (this.parent === null) ? "Root" : "Node";
-        let min = this.min.toString();
-        let max = (this.max === -1) ? "n" : this.max.toString();
-        let card = (this.min === 1 && this.max === 1) ? "" : " {" + min + ", " + max + "}";
-        let s = "    ".repeat(level) + "<" + label + " |" + val + "| " + card + ">";
-        if (this.children.length > 0)
-        {
-            s += "\n";
-        }
-        for (let i=0; i < this.children.length; i++)
-        {
-            s += i.toString().padStart(3, ' ') + '. ' + this.children[i].display(level + 1) + "\n";
-        }
-        return s;
-    }
-*/
 
 Regex.Positions = [Char.Start, Char.End];
 Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
@@ -801,24 +871,6 @@ class Match
         }
     }
 
-    info(starter='')
-    {
-        console.log(starter + this.text);
-        if (this.match || this.partial)
-        {
-            console.log(starter + '^' * this.length + ' matched');
-            let last = 0;
-            console.log(starter + 'Iter  Element                Nb  Matched');
-            for (let i = 0; i < this.regex.size(); i++)
-            {
-                let nb = this.element_matches[i];
-                let tx = this.text.substring(last, last + nb);
-                console.log(starter + i.toString().padStart(5, '0') + ' ' + this.regex.get(i).toString().padStart(22, ' ') + ' ' + nb.toString().padStart(3, '0') + ' |' + tx + '| (from ' + last.toString() + ')');
-                last += nb;
-            }
-        }
-    }
-
     toString()
     {
         if (this.match)
@@ -830,4 +882,7 @@ class Match
             return '<Match none>';
         }
     }
+
 }
+
+export {Regex};
