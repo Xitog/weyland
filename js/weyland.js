@@ -246,7 +246,7 @@ class Element
                     break;
             }
         }
-        return "Element |" + this.value + "|" + card;
+        return this.constructor.name + " |" + this.value + "|" + card;
     }
 
     info(level=0, prefix='')
@@ -284,27 +284,34 @@ class Element
         return this.max;
     }
 
-    match(candidate)
+    match(candidate , start=0, level=0, debug=null)
     {
-        console.log('Element#match:', candidate, 'vs', this.value, candidate === this.value);
-        return (candidate === this.value);
+        let matched = 0;
+        for (let i = start; i < candidate.length && matched <= this.max; i++)
+        {
+            if (candidate[i] === this.value)
+            {
+                matched += 1;
+            }
+            else
+            {
+                break;
+            }
+            if (debug !== null)
+            {
+                debug.push([level, 'Element#match: ' + candidate[i] + " vs " + this + " matched=" + matched]);
+            }
+        }
+        let res = null;
+        if (matched >= this.min)
+        {
+            res = new MiniMatch(this, matched);
+        }
+        return res;
     }
 
 }
-// Classes
-Element.Alpha = '@';
-Element.Digit = '#';
-Element.DigitEscaped = 'd';
-Element.AlphaNum = '&'; // w (alpha + digit + _)
-Element.AlphaNumEscaped = 'w';
-Element.Space = '°';    // s (' ', '\t', '\n', '\f')
-Element.SpaceEscaped = 's';
-Element.Any = '.';
-// Custom classes
-Element.OpenClass = '[';
-Element.CloseClass = ']';
-Element.InvertClass = '^';
-Element.RangeClass = '-';
+
 // Quantifiers
 Element.ZeroOrOne = '?'; // Can be lazy too
 Element.OneOrMore = '+';
@@ -320,13 +327,89 @@ Element.Alternative = '|';
 Element.Escape = '\\';
 // For clean display
 Element.NewLineCode = "<NL>";
+
+//-----------------------------------------------------------------------------
+// La classe Special
+//-----------------------------------------------------------------------------
+
+class Special extends Element
+{
+    constructor(value, parent=null)
+    {
+        super(value, parent);
+        if (value !== Special.Alpha && value !== Special.Digit && value !== Special.AlphaNum
+            && value !== Special.Space && value !== Special.Any)
+        {
+            throw "A special element must be digit, letter, space or word not: |" + value + "|";
+        }
+    }
+
+    match(candidate , start=0, level=0, debug=null)
+    {
+        let matched = 0;
+        let res = null;
+        for (let i = start; i < candidate.length && matched < this.max; i++)
+        {
+            if (this.value === Special.Alpha)
+            {
+                res = Special.Letters.includes(candidate[i]);
+            }
+            else if (this.value === Special.Digit)
+            {
+                res = Special.Digits.includes(candidate[i]);
+            }
+            else if (this.value === Special.AlphaNum)
+            {
+                res = (candidate[i] === '_' || Special.Latin.includes(candidate[i]) || Special.Digits.includes(candidate[i]));
+            }
+            else if (this.value === Special.Space)
+            {
+                res = Special.Spaces.includes(candidate[i]);
+            }
+            else if (this.value === Special.Any)
+            {
+                res = (candidate[i] !== '\n');
+            }
+            if (res)
+            {
+                matched += 1;
+                if (debug !== null)
+                {
+                    debug.push([level, 'Special#match: ' + candidate[i] + " vs " + this + " matched= " + matched + " / " + this.max]);
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+        res = null;
+        if (matched >= this.min)
+        {
+            res = new MiniMatch(this, matched);
+        }
+        return res;
+    }
+}
+// Classes
+Special.Alpha = '@';
+Special.Digit = '#';
+Special.DigitEscaped = 'd';
+Special.AlphaNum = '&'; // w (alpha + digit + _)
+Special.AlphaNumEscaped = 'w';
+Special.Space = '°';    // s (' ', '\t', '\n', '\f')
+Special.SpaceEscaped = 's';
+Special.Any = '.';
 // Base
-Element.Spaces = [' ', '\t', '\n', '\f'];
-Element.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-Element.Latin = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-'U', 'V', 'W', 'X', 'Y', 'Z'];
-Element.Letters = Element.Latin + [
+Special.Spaces = [' ', '\t', '\n', '\f'];
+Special.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+Special.Latin = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+                 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+                 'U', 'V', 'W', 'X', 'Y', 'Z',
+                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+                 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+                 'u', 'v', 'w', 'x', 'y', 'z'];
+Special.Letters = Special.Latin + [
                 'Á', 'À', 'Â', 'Ä', 'Å', 'Ă', 'Æ', 'Ç', 'É', 'È', 'Ê', 'Ë', 'Í', 'Ì', 'Î', 'Œ', 'Ñ',
                 'Ó', 'Ò', 'Ô', 'Ö', 'Ø', 'Ú', 'Ù', 'Û', 'Ü', 'Š', 'Ș', 'Ț', 'Ž', 'ẞ',
                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
@@ -341,26 +424,13 @@ Element.Letters = Element.Latin + [
 
 class Class extends Element
 {
-    constructor(type, parent=null, inverted=false, elements=null)
+    constructor(value, parent=null, elements=null, inverted=false)
     {
-        super(type, parent, 1, 1, false);
-        if (type !== Element.Alpha && type !== Element.Digit && type !== Element.AlphaNum
-            && type !== Element.Space && type !== Element.Any && type !== Class.Custom)
-        {
-            throw "A class must be digit, letter, space, word or custom not: |" + type + "|.";
-        }
+        super(value, parent);
         this.inverted = inverted;
-        if (type === Class.Custom && (elements === null || elements.length <= 1))
+        if (elements === null || elements.length <= 1)
         {
-            throw "A custom class must have at least two elements.";
-        }
-        if (type !== Class.Custom && elements !== null)
-        {
-            throw "A not custom class must not define elements.";
-        }
-        else if (type !== Class.Custom)
-        {
-            elements = [new Element(type)];
+            throw "A class must have at least two elements.";
         }
         this.elements = elements;
     }
@@ -373,11 +443,7 @@ class Class extends Element
             let max = (this.max === -1) ? "*" : this.max;
             card = " {" + this.min + ", " + max + "}";
         }
-        let nb = "";
-        if (this.value === Class.Custom)
-        {
-            nb = " (" + this.elements.length + ")";
-        }
+        let nb = " (" + this.elements.length + ")";
         let inverted = (this.inverted) ? " inverted" : ""
         return "Class |" + this.value + "|" + card + nb + inverted;
     }
@@ -387,45 +453,42 @@ class Class extends Element
         return '    '.repeat(level) + prefix + this.toString();
     }
 
-    match(candidate)
+    match(candidate , start=0, level=0, debug=null)
     {
-        if (this.value === Element.Alpha)
-        {
-            return Element.Letters.includes(candidate);
-        }
-        else if (this.value === Element.Digit)
-        {
-            return Element.Digits.includes(candidate);
-        }
-        else if (this.value === Element.AlphaNum)
-        {
-            return (candidate == '_' || Element.Latin.includes(candidate) || Element.Digit.includes(candidate));
-        }
-        else if (this.value === Element.Space)
-        {
-            return Element.Spaces.includes(candidate);
-        }
-        else if (this.value === Element.Any)
-        {
-            return (candidate !== '\n');
-        }
-        else if (this.value === Class.Custom)
+        let matched = [];
+        let res = null;
+        for (let i = start; i < candidate.length && matched.length <= this.max; i++)
         {
             for (let e of this.elements)
             {
-                if (e.match(candidate))
+                if (e.match(candidate, i, level + 1, debug) !== null)
                 {
-                    return true;
+                    res = e;
+                    break;
                 }
             }
+            if (res !== null)
+            {
+                matched.push(res);
+            }
+            if (debug !== null)
+            {
+                debug.push([level, 'Class#match: ' + candidate[i] + " vs " + this.value + " matched=" + matched]);
+            }
         }
-        else
+        res = null;
+        if (matched.length >= this.min)
         {
-            throw "Unknown type for class : " + this.value;
+            res = new MiniMatch(matched, matched.length);
         }
+        return res;
     }
 }
-Class.Custom = 'Custom';
+// Custom classes
+Class.Open = '[';
+Class.Close = ']';
+Class.Invert = '^';
+Class.Range = '-';
 
 //-----------------------------------------------------------------------------
 // Sequence
@@ -470,49 +533,50 @@ class Sequence extends Element
         return 'Sequence |' + this.value + '| (' + this.elements.length + ')';
     }
 
-    match(candidate, start=0, stop=null)
+    match(candidate , start=0, level=0, debug=null)
     {
-        if (stop == null)
+        if (debug !== null)
         {
-            stop = candidate.length;
+            debug.push([level, 'Sequence#match: "' + candidate + '" vs |' + this.value + '| start=' + start])
         }
-        // Regex is not an atomic Element but a list of Elements so matched is now an array instead of a single value
-        let matched = Array(this.elements.length).fill(0);
+        let matched = [];
         let index_candidate = start;
         let index_regex = 0;
-        while (index_candidate < stop && index_regex < this.elements.length)
+        while (index_candidate < candidate.length && index_regex < this.elements.length)
         {
             let elem = this.elements[index_regex];
-            if (index_regex >= this.elements.length)
-            {
-                throw 'Index ' + index + ' out of range of Regex (' + this.elements.length + ')';
-            }
             let next = (index_regex + 1 < this.elements.length) ? this.elements[index_regex + 1] : null;
-            let res = elem.match(candidate[index_candidate]);
+            let res = elem.match(candidate, index_candidate, level + 1, debug);
+            if (res === null)
+            {
+                break;
+            }
+            matched.push(res);
+            index_regex += 1;
+            index_candidate += res.size();
+            debug.push([level, "Sequence#match: " + matched.length]);
+            /*if (res.isRepeatable())
+            {
+
+            }*/
             //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
             //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
             //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
-            if (res === true)
+            /*if (!elem.isOptionnal())
             {
-                matched[index_regex] += res[1];
-            }
-            else
-            {
-                if (!elem.isOptionnal())
-                {
-                    break;
-                }
-            }
-            index_regex += 1;
-            index_candidate += 1;
+                break;
+            }*/
         }
-        console.log('End of loop: icandidate=', index_candidate, ' iregex=', index_regex, 'lregex=', this.elements.length, ' parent=', this.parent);
+        if (debug !== null)
+        {
+            debug.push([level, 'End of loop: icandidate=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
+        }
         let final_res = (index_regex === this.elements.length);
         if (this.parent !== null)
         {
             if (final_res)
             {
-                return [final_res, matched.reduce((a, b) => a + b, 0)];
+                return [final_res, matched.reduce((a, b) => a.size() + b, 0)];
             }
             else
             {
@@ -530,46 +594,6 @@ class Sequence extends Element
         }
     }
 }
-
-/*
-match(candidate, start, stop=null, next=null, level=0)
-{
-    if (stop === null)
-    {
-        stop = candidate.length;
-    }
-    let matched = 0;
-    console.log('    '.repeat(level) + 'Start Element#match loop with : ', candidate, ', ', start, ', ',
-                stop, ', |', candidate[start], '| vs ', this.value, ', min=', this.min, ', max=', this.max);
-    let notbreak = true;
-    for (let i = start; i < stop && matched< this.max && notbreak; i++)
-    {
-        let res = this.match_one(candidate[i]);
-        if (!res)
-        {
-            notbreak = false;
-        }
-        else if (this.greedy || this.next === null || matched < this.min)
-        {
-            matched += 1;
-        }
-        else // res ok, not greedy => we must try if the next Element is ok and if it is stop
-        {
-            let next_res = next.match(candidate, i, stop, null, level + 1);
-            if (next_res[0])
-            {
-                notbreak = false;
-            }
-            else
-            {
-                matched += 1;
-            }
-        }
-        console.log('    '.repeat(level) + '( candidate[i=' + i + ']=' + candidate[i] + ' vs ' + this.value + ' ) res=' + res + ' matched=' + matched + ' notbreak=' + notbreak);
-    }
-    return [matched >= this.min, matched];
-}
-*/
 
 //-----------------------------------------------------------------------------
 // La classe Regex
@@ -622,28 +646,32 @@ class Regex
         return temp;
     }
 
-    compile_basic_classes(current, target)
+    compile_specials(current, target)
     {
+        if (target === null || target === undefined)
+        {
+            throw "Target must not be null in order to add the special to it.";
+        }
         let res = true;
-        if (current.is(Element.Digit) || current.is_escaped(Element.DigitEscaped))
+        if (current.is(Special.Digit) || current.is_escaped(Special.DigitEscaped))
         {
-            target.push(new Class(Element.Digit));
+            target.push(new Special(Special.Digit));
         }
-        else if (current.is(Element.Alpha))
+        else if (current.is(Special.Alpha))
         {
-            target.push(new Class(Element.Alpha));
+            target.push(new Special(Special.Alpha));
         }
-        else if (current.is(Element.Space) || current.is_escaped(Element.SpaceEscaped))
+        else if (current.is(Special.Space) || current.is_escaped(Special.SpaceEscaped))
         {
-            target.push(new Class(Element.Space));
+            target.push(new Special(Special.Space));
         }
-        else if (current.is(Element.AlphaNum) || current.is_escaped(Element.AlphaNumEscaped))
+        else if (current.is(Special.AlphaNum) || current.is_escaped(Special.AlphaNumEscaped))
         {
-            target.push(new Class(Element.AlphaNum));
+            target.push(new Special(Special.AlphaNum));
         }
-        else if (current.is(Element.Any))
+        else if (current.is(Special.Any))
         {
-            target.push(new Class(Element.Any));
+            target.push(new Special(Special.Any));
         }
         else
         {
@@ -683,34 +711,38 @@ class Regex
             let current = temp[i];
             let prev = this.root.last();
             // Classes
-            if (this.compile_basic_classes(current, this.elements))
+            if (this.compile_specials(current, this.root.elements))
             {
                 // everything is done in the function, do nothing here.
             }
             // Custom classes
-            else if (current.is(Element.OpenClass))
+            else if (current.is(Class.Open))
             {
+                let value = "";
                 let end = -1;
                 let members = [];
                 let inverted = false;
                 for (let j = i + 1; j < temp.length; j++)
                 {
-                    if (j == i + 1 && temp[j].is(Element.InvertClass))
+                    if (j == i + 1 && temp[j].is(Class.Invert))
                     {
                         inverted = true;
                     }
-                    else if (temp[j].is(Element.CloseClass))
+                    else if (temp[j].is(Class.Close))
                     {
                         end = j;
                         break;
                     }
-                    else if (this.compile_basic_classes(temp[j], members))
+                    else if (this.compile_specials(temp[j], members))
                     {
-                        // everything is done in the function, do nothing here.
+                        // including in members is done in the function.
+                        value += temp[j].value;
+
                     }
                     else
                     {
                         members.push(new Element(temp[j].value));
+                        value += temp[j].value;
                     }
                 }
                 if (end === -1)
@@ -721,8 +753,7 @@ class Regex
                 {
                     throw "A custom class must have at least 2 elements."
                 }
-                this.elements.push(new Class(Class.Custom, inverted, members));
-                //console.log(this.elements[this.elements.length-1]);
+                this.elements.push(new Class(value, null, members, inverted));
                 i = end;
             }
             // Quantifiers
@@ -769,9 +800,9 @@ class Regex
         }
     }
 
-    match(text)
+    match(text, debug=null)
     {
-        return this.root.match(text);
+        return this.root.match(text, 0, 0, debug);
     }
 }
 
@@ -813,6 +844,25 @@ Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
 //-----------------------------------------------------------------------------
 // La classe Match
 //-----------------------------------------------------------------------------
+
+class MiniMatch
+{
+    constructor(element, length=1)
+    {
+        this.element = element;
+        this.length = length;
+    }
+
+    add(length=1)
+    {
+        this.length += length;
+    }
+
+    size()
+    {
+        return this.length;
+    }
+}
 
 class Match
 {
