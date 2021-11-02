@@ -60,7 +60,16 @@ test('@@', 'aà');
 test('@@@', 'aàu');
 test('&&&', '1a_');
 
+// Custom class match
+
+
 // Basic match with quantifiers
 
 test('a+', 'aaaaaaaaaaaaaaaaaa');
 test('ba+b', 'baaaaaab');
+
+// Special match with quantifiers
+
+test('#+', '123');
+test('@+', 'àbcdéf');
+test('&+', 'abc_123');
