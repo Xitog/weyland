@@ -13,148 +13,6 @@
  */
 
 //-----------------------------------------------------------------------------
-// Fonctions de démarrage et de réaction
-//-----------------------------------------------------------------------------
-
-/* Fonctions de démarrage */
-
-let regex = null;
-let last_text = null;
-
-function start()
-{
-    let regex = document.getElementById('regex');
-    regex.addEventListener("keypress",
-        function (event)
-        {
-            if (event.code === "Enter")
-            {
-                react('regex');
-            }
-        }
-    );
-    regex.value = '';
-    let text = document.getElementById('text');
-    text.addEventListener("keypress",
-        function (event)
-        {
-            if (event.code === "Enter")
-            {
-                react('text');
-            }
-        }
-    );
-    text.value = '';
-}
-
-function explore(tree, regex)
-{
-    let child = document.createElement('li');
-    child.innerText = regex.toString();
-    if (regex instanceof Regex)
-    {
-        if (regex.elements.length > 0)
-        {
-            let subtree = document.createElement('ol');
-            for (let e of regex.elements)
-            {
-                explore(subtree, e);
-            }
-            child.appendChild(subtree);
-        }
-    } else if (regex instanceof Class) {
-        if (regex.value === Class.Custom)
-        {
-            let subtree = document.createElement('ol');
-            for (let e of regex.elements)
-            {
-                explore(subtree, e);
-            }
-            child.appendChild(subtree);
-        }
-    } else if (regex instanceof Element) {
-        // pass
-    }
-    tree.appendChild(child);
-}
-
-function react(type)
-{
-    console.clear();
-
-    let regex = null;
-
-    // Clean
-    let ana1 = document.getElementById('ana1');
-    ana1.innerHTML = "";
-    let ana2 = document.getElementById('ana2');
-    ana2.innerHTML = "";
-    let res1 = document.getElementById('res1');
-    res1.innerHTML = "";
-    let res2 = document.getElementById('res2');
-    res2.innerHTML = "";
-
-    // Get info
-    let pattern = document.getElementById('regex').value.trim();
-    let text = document.getElementById('text').value.trim();
-
-    if (pattern !== "")
-    {
-        let output = document.getElementById('compile');
-        output.setAttribute('style', 'display: block');
-
-        regex = new Regex(pattern, false);
-
-        // Get Chars
-        let chars = regex.precompile();
-        let list = document.createElement('ol');
-        for (let i = 0; i < chars.length; i++)
-        {
-            let e = document.createElement('li');
-            e.innerText = chars[i].toString();
-            list.appendChild(e);
-        }
-        ana1.appendChild(list);
-        // Get Regex
-        regex.compile();
-        let tree = document.createElement('ul');
-        explore(tree, regex);
-        ana2.appendChild(tree);
-    }
-
-    if (text !== "")
-    {
-        if (type === "text" && regex === null)
-        {
-            alert("No regex defined. Please, define a regex first.");
-            return;
-        }
-
-        let output = document.getElementById('match');
-        output.setAttribute('style', 'display: block');
-
-        let result = regex.match(text);
-        if (result === null || result === undefined)
-        {
-            res1.innerText = "No result.";
-        }
-        else
-        {
-            res1.innerText = result.toString();
-
-            let list = document.createElement('ol');
-            for (let i = 0; i < result.size(); i++)
-            {
-                let e = document.createElement('li');
-                e.innerText = result.get(i).toString();
-                list.appendChild(e);
-            }
-            res2.appendChild(list);
-        }
-    }
-}
-
-//-----------------------------------------------------------------------------
 // La classe Char
 //-----------------------------------------------------------------------------
 
@@ -554,7 +412,10 @@ class Sequence extends Element
             matched.push(res);
             index_regex += 1;
             index_candidate += res.size();
-            debug.push([level, "Sequence#match: " + matched.length]);
+            if (debug !== null)
+            {
+                debug.push([level, "Sequence#match: " + matched.length]);
+            }
             /*if (res.isRepeatable())
             {
 
@@ -892,11 +753,16 @@ class Match
         return this.match;
     }
 
+    getNbElementMatched()
+    {
+        return this.element_matches.length;
+    }
+
     get(index)
     {
         if (index < 0 || index >= this.element_matches.length)
         {
-            throw "Out of range index: " + index + " should be between 0 and " + this.element_matches.length;
+            throw "Out of range index: " + index + " should be between 0 and inferior to " + this.element_matches.length;
         }
         return this.element_matches[index];
     }
@@ -935,4 +801,4 @@ class Match
 
 }
 
-export {Regex};
+export {Regex, Sequence, Class, Special};

@@ -1,4 +1,4 @@
-import {Regex} from "./weyland.js";
+import {Regex} from "./weyland.mjs";
 
 var num = 0;
 
@@ -61,7 +61,6 @@ test('@@@', 'aàu');
 test('&&&', '1a_');
 
 // Custom class match
-
 
 // Basic match with quantifiers
 
