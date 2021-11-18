@@ -5,8 +5,8 @@ var num = 0;
 function test(pattern, text='')
 {
     num += 1;
-    let title = num.toString().padStart(3, 0) + '. Testing: ' + pattern;
-    title += (text.length !== 0) ? ' vs ' + text : "";
+    let title = num.toString().padStart(3, 0) + '. Testing: pattern=|' + pattern + '|';
+    title += (text.length !== 0) ? ' vs candidate=|' + text + '|': "";
     console.log(title);
     console.log('----------');
     let r = new Regex(pattern);
@@ -17,7 +17,8 @@ function test(pattern, text='')
         let m = r.match(text, debug);
         for (let d of debug)
         {
-            console.log('    '.repeat(d[0]) + d[0].toString().padStart(3, '0') + '. ' + d[1]);
+            //console.log('    '.repeat(d[0]) + d[0].toString().padStart(3, '0') + '. ' + d[1]);
+            console.log('    '.repeat(d[0]) + d[1]);
         }
         console.log(m.toString() + "\n");
     }
@@ -72,3 +73,7 @@ test('ba+b', 'baaaaaab');
 test('#+', '123');
 test('@+', 'àbcdéf');
 test('&+', 'abc_123');
+
+// Actual match
+
+test('".*"', '"abc"');

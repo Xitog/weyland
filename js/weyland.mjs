@@ -16,10 +16,11 @@
 // La classe Char
 //-----------------------------------------------------------------------------
 
-/* Elle permet de faire abstraction des échappements de caractère.
-   Lorsque l'on demande si ce caractère est-il ")" avec is(")"), c'est implicite qu'il n'est pas échappé.
+/**
+ * La classe char
+ * Elle permet de faire abstraction des échappements de caractère.
+ * Lorsque l'on demande si ce caractère est-il ")" avec is(")"), c'est implicite qu'il n'est pas échappé.
  */
-
 class Char
 {
     constructor(value, escaped=false)
@@ -163,7 +164,7 @@ class Element
         let res = null;
         if (matched >= this.min)
         {
-            res = new MiniMatch(this, matched);
+            res = new MiniMatch(this, start, matched);
         }
         return res;
     }
@@ -244,7 +245,7 @@ class Special extends Element
         res = null;
         if (matched >= this.min)
         {
-            res = new MiniMatch(this, matched);
+            res = new MiniMatch(this, start, matched);
         }
         return res;
     }
@@ -337,7 +338,7 @@ class Class extends Element
         res = null;
         if (matched.length >= this.min)
         {
-            res = new MiniMatch(matched, matched.length);
+            res = new MiniMatch(matched, start, matched.length);
         }
         return res;
     }
@@ -395,7 +396,7 @@ class Sequence extends Element
     {
         if (debug !== null)
         {
-            debug.push([level, 'Sequence#match: "' + candidate + '" vs |' + this.value + '| start=' + start])
+            debug.push([level, 'Sequence#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start])
         }
         let matched = [];
         let index_candidate = start;
@@ -403,19 +404,70 @@ class Sequence extends Element
         while (index_candidate < candidate.length && index_regex < this.elements.length)
         {
             let elem = this.elements[index_regex];
-            let next = (index_regex + 1 < this.elements.length) ? this.elements[index_regex + 1] : null;
-            let res = elem.match(candidate, index_candidate, level + 1, debug);
+            if (debug !== null)
+            {
+                debug.push([level + 1, 'loop ic=' + index_candidate + ' ir=' + index_regex + ' ' +
+                            candidate.substring(index_candidate) + ' vs '+ elem.toString()]);
+            }
+            let res = elem.match(candidate, index_candidate, level + 2, debug);
             if (res === null)
             {
                 break;
+            }
+            // Test next sequence element against the minimal next
+            if (elem.getMax() > 1 && elem.getQuantifier() != Element.Possessive && index_regex + 1 < this.elements.length)
+            {
+                let next = this.elements[index_regex + 1];
+                let index_candidate_start_next = index_candidate;
+                if (elem.getQuantifier() === Element.Lazy) // We want to match the least number of chars
+                {
+                    index_candidate_start_next += elem.getMin();
+                }
+                else // Element.Normal
+                {
+                    index_candidate_start_next += res.size() - 1; // Arbitrary
+                }
+                if (debug !== null)
+                {
+                    debug.push([level + 2, '???? next ic=' + index_candidate_start_next + ' ir=' +
+                                (index_regex + 1) + ' ' + candidate.substring(index_candidate_start_next) + ' vs ' +
+                                next.toString() + ' (' + (res.size() - elem.getMin()) + ' chars of freedom)']);
+                }
+                let next_res = next.match(candidate, index_candidate_start_next, level + 3, debug);
+                if (next_res !== null)
+                {
+                    if (elem.getQuantifier() === Element.Lazy) // We want to match the least number of chars
+                    {
+                        res.reduce();
+                    }
+                    else if (elem.getQuantifier() === Element.Greedy)
+                    {
+                        if (index_candidate + res.size() === candidate.length && index_regex < this.elements.length - 1) // end of string but not end of regex
+                        {
+                            res.reduce(1); // Arbitrary
+                        }
+                    }
+                    if (debug !== null)
+                    {
+                        debug.push([level + 2, '---> ' + next_res.toString() + ' = |' + next_res.matched(candidate) + '|']);
+                    }
+                }
+                else
+                {
+                    if (debug !== null)
+                    {
+                        debug.push([level + 2, '---> no result']);
+                    }
+                }
             }
             matched.push(res);
             index_regex += 1;
             index_candidate += res.size();
             if (debug !== null)
             {
-                debug.push([level, "Sequence#match: " + matched.length]);
+                debug.push([level + 1, '---> ' + res.toString() + ' = |' + res.matched(candidate) + '|']);
             }
+            //let len = matched.reduce((a, b) => a.size() + b, 0);
             /*if (res.isRepeatable())
             {
 
@@ -430,14 +482,15 @@ class Sequence extends Element
         }
         if (debug !== null)
         {
-            debug.push([level, 'End of loop: icandidate=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
+            debug.push([level, 'Sequence#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
         }
+        //debug.push([level, "Sequence#match: END length matched this turn=" + res.size()]);
         let final_res = (index_regex === this.elements.length);
         if (this.parent !== null)
         {
             if (final_res)
             {
-                return [final_res, matched.reduce((a, b) => a.size() + b, 0)];
+                return [final_res, len];
             }
             else
             {
@@ -708,20 +761,47 @@ Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
 
 class MiniMatch
 {
-    constructor(element, length=1)
+    constructor(element, start, length=1)
     {
         this.element = element;
+        this.start = start;
         this.length = length;
     }
 
-    add(length=1)
+    /*add(length=1)
     {
         this.length += length;
+    }*/
+
+    reduce(length=null)
+    {
+        if (length === null)
+        {
+            this.length = element.getMin();
+        }
+        else
+        {
+            this.length -= length;
+            if (this.length < this.element.getMin())
+            {
+                throw "Illogical match: can't be reduced lower than element min.";
+            }
+        }
     }
 
     size()
     {
         return this.length;
+    }
+
+    toString()
+    {
+        return '<MiniMatch start=' + this.start + ' #' + this.length + '>';
+    }
+
+    matched(candidate)
+    {
+        return candidate.substring(this.start, this.start + this.length);
     }
 }
 
