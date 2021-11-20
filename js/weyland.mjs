@@ -667,7 +667,7 @@ class Regex
                 {
                     throw "A custom class must have at least 2 elements."
                 }
-                this.elements.push(new Class(value, null, members, inverted));
+                this.root.elements.push(new Class(value, null, members, inverted));
                 i = end;
             }
             // Quantifiers
@@ -817,6 +817,12 @@ class Match
         this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
     }
 
+    equals(other)
+    {
+        return (this.regex === other.regex && this.text === other.text &&
+                this.match === other.match && this.length === other.length);
+    }
+
     // Pas de surchage de length en JavaScript
     size()
     {
@@ -871,7 +877,7 @@ class Match
     {
         if (this.match)
         {
-            return '<Match matched |' + this.getMatch() + '| (' + 0 + ' to ' + (this.length - 1) + ')>';
+            return '<Match matched |' + this.getMatch() + '| #' + this.length + ' (' + 0 + ' to ' + (this.length - 1) + ')>';
         } else if (this.partial) {
             return '<Match partial |' + this.getMatch() + '|>';
         } else {
@@ -881,4 +887,4 @@ class Match
 
 }
 
-export {Regex, Sequence, Class, Special};
+export {Regex, Sequence, Class, Special, Match};
