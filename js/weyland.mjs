@@ -819,7 +819,7 @@ class Match
 
     equals(other)
     {
-        return (this.regex === other.regex && this.text === other.text &&
+        return (this.regex === other.regex && this.getMatch() === other.getMatch() &&
                 this.match === other.match && this.length === other.length);
     }
 

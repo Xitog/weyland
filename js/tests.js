@@ -7,119 +7,152 @@ var bad = 0;
 
 class ExpectedMatch
 {
-    constructor(text, length, result)
+    constructor(good, left, length, result)
     {
-        this.text = text;
+        this.text = good + left;
+        this.left = left; // good = thjs.text.substring(0, this.length)
         this.length = length;
         this.match = result;
     }
+
+    getMatch()
+    {
+        return ((this.length === null ? '' : this.text.substring(0, this.length)));
+    }
 }
 
-function test(pattern, text='', expected=null)
+class Test
 {
-    num += 1;
-    let title = num.toString().padStart(3, 0) + '. Testing: pattern=|' + pattern + '|';
-    title += (text.length !== 0) ? ' vs candidate=|' + text + '|': "";
-    console.log(title);
-    console.log('----------');
-    let r = new Regex(pattern);
-    console.log(r.info());
-    if (text.length !== 0)
+    constructor(pattern, text='', expected=null)
     {
-        let debug = [];
-        let m = r.match(text, debug);
-        for (let d of debug)
+        this.pattern = pattern;
+        this.text = text;
+        this.expected = expected;
+    }
+
+    test()
+    {
+        num += 1;
+        let title = num.toString().padStart(3, 0) + '. Testing: pattern=|' + this.pattern + '|';
+        title += (this.text.length !== 0) ? ' vs candidate=|' + this.text + '|': "";
+        console.log(title);
+        console.log('----------');
+        let r = new Regex(this.pattern);
+        console.log(r.info());
+        if (this.text.length !== 0)
         {
-            //console.log('    '.repeat(d[0]) + d[0].toString().padStart(3, '0') + '. ' + d[1]);
-            console.log('    '.repeat(d[0]) + d[1]);
-        }
-        console.log(m.toString());
-        if (expected !== null && expected instanceof ExpectedMatch)
-        {
-            let expected_match = new Match(r.root, expected.text); // Because it'Seq with is linked to Match instance. Should be changed.
-            expected_match.length = expected.length;
-            expected_match.text = expected.text;
-            expected_match.match = expected.match;
-            if (m.equals(expected_match))
+            let debug = [];
+            let m = r.match(this.text, debug);
+            for (let d of debug)
             {
-                console.log('=== OK ===\n');
-                good += 1;
-                return 1;
+                //console.log('    '.repeat(d[0]) + d[0].toString().padStart(3, '0') + '. ' + d[1]);
+                console.log('    '.repeat(d[0]) + d[1]);
+            }
+            console.log(m.toString());
+            if (this.expected !== null && this.expected instanceof ExpectedMatch)
+            {
+                let expected_match = new Match(r.root, this.expected.text); // Because it'Seq with is linked to Match instance. Should be changed.
+                expected_match.length = this.expected.length;
+                expected_match.text = this.expected.text;
+                expected_match.match = this.expected.match;
+                if (m.equals(expected_match))
+                {
+                    console.log('=== OK ===\n');
+                    good += 1;
+                    return 1;
+                }
+                else
+                {
+                    console.log('!!! KO !!!');
+                    console.log('Expected:', this.expected);
+                    console.log('Result  :', m, "\n");
+                    bad += 1;
+                    process.exit() // return -1
+                }
             }
             else
             {
-                console.log('!!! KO !!!');
-                console.log('Expected:', expected);
-                console.log('Result  :', m, "\n");
-                bad += 1;
-                process.exit() // return -1
+                console.log("");
             }
         }
-        else
-        {
-            console.log("");
-        }
+        neutral += 1;
+        return 0;
     }
-    neutral += 1;
-    return 0;
 }
 
-// Basic
+// ExpectedMatch
+//  1. la partie du texte qui est matchée
+//  2. la partie du texte qui est laissée ou ... si partial
+//  3. la longueur de la partie matchée
+//  4. match ou pas? (un match partial est FAUX)
 
-test('abc');
+var tests = {
+    // Basic
+     100: new Test('abc', 'abc', new ExpectedMatch('abc', '', 3, true)),
+     101: new Test("abc", "zor", new ExpectedMatch('', 'zor', 0, false)),
+     102: new Test("abc", "ab", new ExpectedMatch('ab', '...', 2, false)),
+     103: new Test("abc", "abc", new ExpectedMatch('abc', '', 3, true)),
+     104: new Test("abc", "abcd", new ExpectedMatch('abc', 'd', 3, true)),
 
-// Specials
+    // Specials
+     2: new Test('#', '1', new ExpectedMatch('1', '', 1, true)),
+     3: new Test('°', ' ', new ExpectedMatch(' ', '', 1, true)),
+     4: new Test('@', 'a', new ExpectedMatch('a', '', 1, true)),
+     5: new Test('&', 'b', new ExpectedMatch('b', '', 1, true)),
 
-test('#');
-test('°');
-test('@');
-test('&');
+    // All quantifiers in greedy, lazy and possessive forms
 
-// All quantifiers in greedy, lazy and possessive forms
+     6: new Test('ab?c'),
+     7: new Test('ab+c'),
+     8: new Test('ab*c'),
+     9: new Test('ab??c'),
+    10: new Test('ab+?c'),
+    11: new Test('ab*?c'),
+    12: new Test('ab?+c'),
+    13: new Test('ab++c'),
+    14: new Test('ab*+c'),
 
-test('ab?c');
-test('ab+c');
-test('ab*c');
-test('ab??c');
-test('ab+?c');
-test('ab*?c');
-test('ab?+c');
-test('ab++c');
-test('ab*+c');
+    // Basic match
 
-// Basic match
+    15: new Test('abc', 'abcdef', new ExpectedMatch('abc', 'def', 3, true)),
 
-test('abc', 'abcdef');
+    // Special match
 
-// Special match
+    16: new Test('#', '1', new ExpectedMatch('1', '', 1, true)),
+    17: new Test('##', '12', new ExpectedMatch('12', '', 2, true)),
+    18: new Test('###', '123', new ExpectedMatch('123', '', 3, true)),
+    19: new Test('@', 'a', new ExpectedMatch('a', '', 1, true)),
+    20: new Test('@@', 'aà', new ExpectedMatch('aà', '', 2, true)),
+    21: new Test('@@@', 'aàu', new ExpectedMatch('aàu', '', 3, true)),
+    22: new Test('&&&', '1a_', new ExpectedMatch('1a_', '', 3, true)),
 
-test('#', '1', new ExpectedMatch('1', 1, true));
-test('##', '12', new ExpectedMatch('12', 2, true));
-test('###', '123', new ExpectedMatch('123', 3, true));
-test('@', 'a', new ExpectedMatch('a', 1, true));
-test('@@', 'aà', new ExpectedMatch('aà', 2, true));
-test('@@@', 'aàu', new ExpectedMatch('aàu', 3, true));
-test('&&&', '1a_', new ExpectedMatch('1a_', 3, true));
+    // Custom class match
 
-// Custom class match
+    23: new Test('[ab]', 'a', new ExpectedMatch('a', '', 1, true)),
 
-test('[ab]', 'a', new ExpectedMatch('a', 1, true));
+    // Basic match with quantifiers
 
-// Basic match with quantifiers
+    24: new Test('a+', 'aaaaaaaaaaaaaaaaaa', new ExpectedMatch('aaaaaaaaaaaaaaaaaa', '', 18, true)),
+    25: new Test('ba+b', 'baaaaaab', new ExpectedMatch('baaaaaab', '', 8, true)),
 
-test('a+', 'aaaaaaaaaaaaaaaaaa');
-test('ba+b', 'baaaaaab');
+    // Special match with quantifiers
 
-// Special match with quantifiers
+    26: new Test('#+', '123', new ExpectedMatch('123', '', 3, true)),
+    27: new Test('@+', 'àbcdéf', new ExpectedMatch('àbcdéf', '', 6, true)),
+    28: new Test('&+', 'abc_123', new ExpectedMatch('abc_123', '', 7, true)),
 
-test('#+', '123');
-test('@+', 'àbcdéf');
-test('&+', 'abc_123');
+    // Actual match
 
-// Actual match
+    29: new Test('".*"', '"abc"', new ExpectedMatch('"abc"', '', 5, true)),
+    30: new Test("'.*'", "'Je suis un zorba'", new ExpectedMatch("'Je suis un zorba'", '', 18, true)),
+    31: new Test('#+', '123', new ExpectedMatch('123', '', 3, true))
+}
 
-test('".*"', '"abc"');
-test('#+', '123');
+for (let [key, value] of Object.entries(tests))
+{
+    process.stdout.print('<' + key + '> ');
+    value.test();
+}
 
 console.log("Good    :", good);
 console.log("Neutral :", neutral);
