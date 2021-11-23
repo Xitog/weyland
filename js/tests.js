@@ -9,10 +9,26 @@ class ExpectedMatch
 {
     constructor(good, left, length, result)
     {
-        this.text = good + left;
-        this.left = left; // good = thjs.text.substring(0, this.length)
+        if (left !== '...')
+        {
+            this.text = good + left;
+            this.left = left; // good = thjs.text.substring(0, this.length)
+            this.partial = false;
+        }
+        else
+        {
+            this.text = good;
+            this.left = '';
+            this.partial = true;
+        }
         this.length = length;
         this.match = result;
+    }
+
+    toString()
+    {
+        return "ExpectedMatch {" + this.text.substring(0, this.length) + "||" + this.left +
+               " (" + this.length + ") res= " + this.match + " part= " + this.partial + "}";
     }
 
     getMatch()
@@ -64,7 +80,7 @@ class Test
                 else
                 {
                     console.log('!!! KO !!!');
-                    console.log('Expected:', this.expected);
+                    console.log('Expected:', this.expected.toString());
                     console.log('Result  :', m, "\n");
                     bad += 1;
                     process.exit() // return -1
@@ -150,7 +166,7 @@ var tests = {
 
 for (let [key, value] of Object.entries(tests))
 {
-    process.stdout.print('<' + key + '> ');
+    process.stdout.write('<' + key + '> ');
     value.test();
 }
 
