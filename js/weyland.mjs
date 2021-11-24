@@ -161,12 +161,8 @@ class Element
                 debug.push([level, 'Element#match: ' + candidate[i] + " vs " + this + " matched=" + matched]);
             }
         }
-        let res = null;
-        if (matched >= this.min)
-        {
-            res = new Match(this, candidate, start, matched);
-        }
-        return res;
+        let res = (matched >= this.min) ? true : false;
+        return new Match(this, candidate, start, matched, res);
     }
 
 }
@@ -398,7 +394,7 @@ class Sequence extends Element
         {
             debug.push([level, 'Sequence#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start])
         }
-        let matched = [];
+        let matched = new MatchSet(this, candidate, start);
         let index_candidate = start;
         let index_regex = 0;
         while (index_candidate < candidate.length && index_regex < this.elements.length)
@@ -410,6 +406,7 @@ class Sequence extends Element
                             candidate.substring(index_candidate) + ' vs '+ elem.toString()]);
             }
             let res = elem.match(candidate, index_candidate, level + 2, debug);
+            console.log('bbbbbbbbbbbbbbbbbbbbbbb', res);
             if (res === null)
             {
                 break;
@@ -468,37 +465,18 @@ class Sequence extends Element
                 debug.push([level + 1, '---> ' + res.toString() + ' = |' + res.getMatched(candidate) + '|']);
             }
             //let len = matched.reduce((a, b) => a.size() + b, 0);
-            /*if (res.isRepeatable())
-            {
-
-            }*/
             //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
             //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
             //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
-            /*if (!elem.isOptionnal())
-            {
-                break;
-            }*/
         }
         if (debug !== null)
         {
             debug.push([level, 'Sequence#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
         }
-        //debug.push([level, "Sequence#match: END length matched this turn=" + res.size()]);
-        let total = 0;
-        for (let o of matched)
-        {
-            total += o.size();
-        }
-        let final_res = (index_regex === this.elements.length);
-        if (final_res)
-        {
-            return [final_res, total];
-        }
-        else
-        {
-            return [final_res, total];
-        }
+        // ???
+        matched.match = (index_regex === this.elements.length);
+        matched.partial = (index_candidate === candidate.length && index_regex < this.elements.length);
+        return matched;
     }
 }
 
@@ -709,12 +687,7 @@ class Regex
 
     match(text, debug=null)
     {
-        let results = this.root.match(text, 0, 0, debug);
-        let final = new Match(this.root, text, 0, results[1]);
-        final.match = results[0];
-        //final.element_matches = matched; // Length of candidate text matched for each elements of the Regex
-        //this.partial = false;       // In case of not matching, is it due to not enough chars?
-        return final;
+        return this.root.match(text, 0, 0, debug);
     }
 }
 
@@ -757,24 +730,16 @@ Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
 // La classe Match
 //-----------------------------------------------------------------------------
 
-class MatchSet
-{
-    constructor()
-    {
-        this.matches = [];
-    }
-}
-
 class Match
 {
-    constructor(element, text, start=null, length=null)
+    constructor(element, text, start=null, length=null, match=false, partial=false)
     {
         this.element = element; // Regex element
         this.text = text;       // Text candidate
         this.start = start;     // Start of the match in text candidate
         this.length = length;   // Length of candidate text matched
-        this.match = false;     // Matched or not?
-        this.partial = false;   // In case of not matching, is it due to not enough chars?
+        this.match = match;     // Matched or not?
+        this.partial = partial; // In case of not matching, is it due to not enough chars?
         //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
     }
 
@@ -799,7 +764,7 @@ class Match
     {
         if (length === null)
         {
-            this.length = element.getMin();
+            this.length = this.element.getMin();
         }
         else
         {
@@ -837,6 +802,119 @@ class Match
     getMatched()
     {
         return ((this.length === null ? '' : this.text.substring(this.start, this.start + this.length)));
+    }
+}
+
+//-----------------------------------------------------------------------------
+// La classe MatchSet une encapsulation d'une liste de match
+//-----------------------------------------------------------------------------
+
+class MatchSet extends Match
+{
+    constructor(element, text, start=null, length=null)
+    {
+        super(element, text, start, length);
+        this.matches = [];
+    }
+
+    push(m)
+    {
+        this.matches.push(m);
+        this.length = this.size();
+    }
+
+    get(i)
+    {
+        if (i < 0 || i > this.matches.length)
+        {
+            throw "Index out of range: " + i + " / " + this.matches.length;
+        }
+        return this.matches[i];
+    }
+
+    last()
+    {
+        if (this.matches.length === 0)
+        {
+            throw "Cannot get the last element on an empty list";
+        }
+        return this.matches[this.matches.length - 1];
+    }
+
+    equals(other)
+    {
+        if (this.matches.length !== other.length)
+        {
+            return false;
+        }
+        if (other instanceof MatchSet)
+        {
+            for (let i = 0; i < this.matches.length; i++)
+            {
+                if (!this.matches[i].equals(other.get(i)))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        else
+        {
+            return super.equals(other);
+        }
+    }
+
+    reduce(length=null)
+    {
+        if (length === null)
+        {
+            this.last().length = this.last().element.getMin();
+        }
+        else
+        {
+            this.last().length -= length;
+            if (this.last().length < this.last().element.getMin())
+            {
+                throw "Illogical match: can't be reduced lower than element min.";
+            }
+        }
+    }
+
+    // Pas de surchage de length en JavaScript
+    size()
+    {
+        let total = 0;
+        for (let m of this.matches)
+        {
+            total += m.size();
+        }
+        return total;
+    }
+
+    toString()
+    {
+        if (this.match)
+        {
+            return '<Match matched |' + this.getMatched() + '| #' + this.size() + ' (' + this.start + ' to ' + (this.start + this.size() - 1) + ')>';
+        }
+        else if (this.partial)
+        {
+            return '<Match partial |' + this.getMatched() + '| #' + this.size() + ' ('  + this.start + '>';
+        }
+        else
+        {
+            return '<Match none>';
+        }
+    }
+
+    getMatched()
+    {
+        let total = '';
+        for (let m of this.matches)
+        {
+            total += m.getMatched();
+        }
+        return total;
     }
 }
 
