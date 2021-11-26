@@ -162,7 +162,7 @@ class Element
             }
         }
         let res = (matched >= this.min) ? true : false;
-        return new Match(this, candidate, start, matched, res);
+        return new Match(this, candidate, res, start, matched);
     }
 
 }
@@ -238,16 +238,21 @@ class Special extends Element
                 break;
             }
         }
-        res = null;
+        res = false;
         if (matched >= this.min)
         {
-            res = new Match(this, candidate, start, matched);
+            res = true;
         }
-        return res;
+        //if (!res && i < candidate.length) // we break because of a bad thing, not because we reached the end of the candidate string
+        //{
+        //    matched = 0;
+        //}
+        return new Match(this, candidate, res, start, matched);;
     }
 }
 // Classes
 Special.Alpha = '@';
+Special.AlphaEscaped = 'a';
 Special.Digit = '#';
 Special.DigitEscaped = 'd';
 Special.AlphaNum = '&'; // w (alpha + digit + _)
@@ -331,12 +336,12 @@ class Class extends Element
                 debug.push([level, 'Class#match: ' + candidate[i] + " vs " + this.value + " matched=" + matched]);
             }
         }
-        res = null;
+        res = false;
         if (matched.length >= this.min)
         {
-            res = new Match(matched, candidate, start, matched.length);
+            res = true;
         }
-        return res;
+        return new Match(matched, candidate, res, start, matched.length);
     }
 }
 // Custom classes
@@ -394,7 +399,7 @@ class Sequence extends Element
         {
             debug.push([level, 'Sequence#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start])
         }
-        let matched = new MatchSet(this, candidate, start);
+        let matched = new MatchSet(this, candidate, false, start);
         let index_candidate = start;
         let index_regex = 0;
         while (index_candidate < candidate.length && index_regex < this.elements.length)
@@ -406,8 +411,7 @@ class Sequence extends Element
                             candidate.substring(index_candidate) + ' vs '+ elem.toString()]);
             }
             let res = elem.match(candidate, index_candidate, level + 2, debug);
-            console.log('bbbbbbbbbbbbbbbbbbbbbbb', res);
-            if (res === null)
+            if (!res.isMatch())
             {
                 break;
             }
@@ -475,7 +479,25 @@ class Sequence extends Element
         }
         // ???
         matched.match = (index_regex === this.elements.length);
+        // Si tous les suivants sont optionnels, c'est un match quand même
+        let all_optional = true;
+        for (let i = index_regex; i < this.elements.length; i++)
+        {
+            if (!this.elements[i].isOptionnal())
+            {
+                all_optional = false;
+                break;
+            }
+        }
+        if (all_optional)
+        {
+            matched.match = true;
+        }
         matched.partial = (index_candidate === candidate.length && index_regex < this.elements.length);
+        if (matched.match)
+        {
+            matched.partial = false; // On force à false si matched
+        }
         return matched;
     }
 }
@@ -542,7 +564,7 @@ class Regex
         {
             target.push(new Special(Special.Digit));
         }
-        else if (current.is(Special.Alpha))
+        else if (current.is(Special.Alpha) || current.is_escaped(Special.AlphaEscaped))
         {
             target.push(new Special(Special.Alpha));
         }
@@ -732,7 +754,7 @@ Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
 
 class Match
 {
-    constructor(element, text, start=null, length=null, match=false, partial=false)
+    constructor(element, text, match=false, start=null, length=null, partial=false)
     {
         this.element = element; // Regex element
         this.text = text;       // Text candidate
@@ -745,6 +767,9 @@ class Match
 
     equals(other)
     {
+        console.log("getMatched()", this.getMatched(), other.getMatched(),
+                  "match", this.match, other.match, "partial", this.partial, other.partial,
+                  "length", this.length, other.length);
         return (this.element === other.element && this.getMatched() === other.getMatched() &&
                 this.match === other.match && this.partial === other.partial &&
                 this.length === other.length);
@@ -791,7 +816,7 @@ class Match
         }
         else if (this.partial)
         {
-            return '<Match partial |' + this.getMatched() + '| #' + this.length + ' ('  + this.start + '>';
+            return '<Match partial |' + this.getMatched() + '| #' + this.length + ' ('  + this.start + ') >';
         }
         else
         {
@@ -811,9 +836,9 @@ class Match
 
 class MatchSet extends Match
 {
-    constructor(element, text, start=null, length=null)
+    constructor(element, text, match=false, start=null, length=null, partial=false)
     {
-        super(element, text, start, length);
+        super(element, text, match, start, length, partial);
         this.matches = [];
     }
 
@@ -843,7 +868,8 @@ class MatchSet extends Match
 
     equals(other)
     {
-        if (this.matches.length !== other.length)
+        //console.log(this.size(), other.length);
+        if (this.size() !== other.length)
         {
             return false;
         }
@@ -860,6 +886,7 @@ class MatchSet extends Match
         }
         else
         {
+            this.length = this.size();
             return super.equals(other);
         }
     }
@@ -883,10 +910,21 @@ class MatchSet extends Match
     // Pas de surchage de length en JavaScript
     size()
     {
-        let total = 0;
+        if (!this.match && !this.partial)
+        {
+            return null;
+        }
+        let total = null;
         for (let m of this.matches)
         {
-            total += m.size();
+            if (m.isMatch())
+            {
+                if (total === null)
+                {
+                    total = 0;
+                }
+                total += m.size();
+            }
         }
         return total;
     }
@@ -895,20 +933,24 @@ class MatchSet extends Match
     {
         if (this.match)
         {
-            return '<Match matched |' + this.getMatched() + '| #' + this.size() + ' (' + this.start + ' to ' + (this.start + this.size() - 1) + ')>';
+            return '<MatchSet(' + this.matches.length + ') matched |' + this.getMatched() + '| #' + this.size() + ' (' + this.start + ' to ' + (this.start + this.size() - 1) + ')>';
         }
         else if (this.partial)
         {
-            return '<Match partial |' + this.getMatched() + '| #' + this.size() + ' ('  + this.start + '>';
+            return '<MatchSet(' + this.matches.length + ') partial |' + this.getMatched() + '| #' + this.size() + ' ('  + this.start + ') >';
         }
         else
         {
-            return '<Match none>';
+            return '<MatchSet(0) none>';
         }
     }
 
     getMatched()
     {
+        if (!this.match && !this.partial)
+        {
+            return '';
+        }
         let total = '';
         for (let m of this.matches)
         {

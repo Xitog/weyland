@@ -5,10 +5,22 @@ var neutral = 0;
 var good = 0;
 var bad = 0;
 
-class ExpectedMatch
+class ExpectedResult
 {
-    constructor(good, left, length, result)
+    constructor(good, left, result, length=null)
     {
+        if (!result && left !== '...' && length !== null)
+        {
+            throw "A result without match and not partial can't have a length";
+        }
+        if (!result && left === '...' && length === null)
+        {
+            throw "A result without match but partial must have a length";
+        }
+        if (result && length === null)
+        {
+            throw "A matching result must have a length";
+        }
         if (left !== '...')
         {
             this.text = good + left;
@@ -27,8 +39,15 @@ class ExpectedMatch
 
     toString()
     {
-        return "ExpectedMatch {" + this.text.substring(0, this.length) + "||" + this.left +
-               " (" + this.length + ") res= " + this.match + " part= " + this.partial + "}";
+        if (this.length !== null)
+        {
+            return "ExpectedResult {" + this.text.substring(0, this.length) + "||" + this.left +
+               " (" + this.length + ") res=" + this.match + " part=" + this.partial + "}";
+        }
+        else
+        {
+            return "ExpectedResult { no match }";
+        }
     }
 
     getMatch()
@@ -65,12 +84,13 @@ class Test
                 console.log('    '.repeat(d[0]) + d[1]);
             }
             console.log(m.toString());
-            if (this.expected !== null && this.expected instanceof ExpectedMatch)
+            if (this.expected !== null && this.expected instanceof ExpectedResult)
             {
                 let expected_match = new Match(r.root, this.expected.text); // Because it'Seq with is linked to Match instance. Should be changed.
                 expected_match.length = this.expected.length;
                 expected_match.text = this.expected.text;
                 expected_match.match = this.expected.match;
+                expected_match.partial = this.expected.partial;
                 if (m.equals(expected_match))
                 {
                     console.log('=== OK ===\n');
@@ -81,7 +101,7 @@ class Test
                 {
                     console.log('!!! KO !!!');
                     console.log('Expected:', this.expected.toString());
-                    console.log('Result  :', m, "\n");
+                    console.log('Result  :', m.toString(), "\n");
                     bad += 1;
                     process.exit() // return -1
                 }
@@ -96,25 +116,34 @@ class Test
     }
 }
 
-// ExpectedMatch
+// ExpectedResult
 //  1. la partie du texte qui est matchée
 //  2. la partie du texte qui est laissée ou ... si partial
-//  3. la longueur de la partie matchée
-//  4. match ou pas? (un match partial est FAUX)
+//  3. match ou pas? (un match partial est FAUX)
+//  4. la longueur de la partie matchée (ou partiellement matchée)
 
 var tests = {
     // Basic
-     100: new Test('abc', 'abc', new ExpectedMatch('abc', '', 3, true)),
-     101: new Test("abc", "zor", new ExpectedMatch('', 'zor', 0, false)),
-     102: new Test("abc", "ab", new ExpectedMatch('ab', '...', 2, false)),
-     103: new Test("abc", "abc", new ExpectedMatch('abc', '', 3, true)),
-     104: new Test("abc", "abcd", new ExpectedMatch('abc', 'd', 3, true)),
+
+     100: new Test('abc', 'abc', new ExpectedResult('abc', '', true, 3)),
+     101: new Test("abc", "zor", new ExpectedResult('', 'zor', false)),
+     102: new Test("abc", "ab", new ExpectedResult('ab', '...', false, 2)), // On ne précise la longueur d'un false que dans le cas d'un partial
+     103: new Test("abc", "abc", new ExpectedResult('abc', '', true, 3)),
+     104: new Test("abc", "abcd", new ExpectedResult('abc', 'd', true, 3)),
 
     // Specials
-     2: new Test('#', '1', new ExpectedMatch('1', '', 1, true)),
-     3: new Test('°', ' ', new ExpectedMatch(' ', '', 1, true)),
-     4: new Test('@', 'a', new ExpectedMatch('a', '', 1, true)),
-     5: new Test('&', 'b', new ExpectedMatch('b', '', 1, true)),
+
+     2: new Test('#', '1', new ExpectedResult('1', '', true, 1)),
+     3: new Test('°', ' ', new ExpectedResult(' ', '', true, 1)),
+     4: new Test('@', 'a', new ExpectedResult('a', '', true, 1)),
+     5: new Test('&', 'b', new ExpectedResult('b', '', true, 1)),
+
+    110: new Test("&", "5", new ExpectedResult('5', '', true, 1)),
+    111: new Test("\\w", "5", new ExpectedResult('5', '', true, 1)),
+    112: new Test("&", "a", new ExpectedResult('a', '', true, 1)),
+    113: new Test("\\w", "a", new ExpectedResult('a', '', true, 1)),
+    114: new Test("&", "ab", new ExpectedResult('a', 'b', true, 1)),
+    115: new Test("\\w", "ab", new ExpectedResult('a', 'b', true, 1)),
 
     // All quantifiers in greedy, lazy and possessive forms
 
@@ -130,42 +159,68 @@ var tests = {
 
     // Basic match
 
-    15: new Test('abc', 'abcdef', new ExpectedMatch('abc', 'def', 3, true)),
+    15: new Test('abc', 'abcdef', new ExpectedResult('abc', 'def', true, 3)),
 
     // Special match
 
-    16: new Test('#', '1', new ExpectedMatch('1', '', 1, true)),
-    17: new Test('##', '12', new ExpectedMatch('12', '', 2, true)),
-    18: new Test('###', '123', new ExpectedMatch('123', '', 3, true)),
-    19: new Test('@', 'a', new ExpectedMatch('a', '', 1, true)),
-    20: new Test('@@', 'aà', new ExpectedMatch('aà', '', 2, true)),
-    21: new Test('@@@', 'aàu', new ExpectedMatch('aàu', '', 3, true)),
-    22: new Test('&&&', '1a_', new ExpectedMatch('1a_', '', 3, true)),
+    16: new Test('#', '1', new ExpectedResult('1', '', true, 1)),
+    17: new Test('##', '12', new ExpectedResult('12', '', true, 2)),
+    18: new Test('###', '123', new ExpectedResult('123', '', true, 3)),
+    19: new Test('@', 'a', new ExpectedResult('a', '', true, 1)),
+    20: new Test('@@', 'aà', new ExpectedResult('aà', '', true, 2)),
+    21: new Test('@@@', 'aàu', new ExpectedResult('aàu', '', true, 3)),
+    22: new Test('&&&', '1a_', new ExpectedResult('1a_', '', true, 3)),
 
     // Custom class match
 
-    23: new Test('[ab]', 'a', new ExpectedMatch('a', '', 1, true)),
+    23: new Test('[ab]', 'a', new ExpectedResult('a', '', true, 1)),
 
     // Basic match with quantifiers
 
-    24: new Test('a+', 'aaaaaaaaaaaaaaaaaa', new ExpectedMatch('aaaaaaaaaaaaaaaaaa', '', 18, true)),
-    25: new Test('ba+b', 'baaaaaab', new ExpectedMatch('baaaaaab', '', 8, true)),
+    24: new Test('a+', 'aaaaaaaaaaaaaaaaaa', new ExpectedResult('aaaaaaaaaaaaaaaaaa', '', true, 18)),
+    25: new Test('ba+b', 'baaaaaab', new ExpectedResult('baaaaaab', '', true, 8)),
 
     // Special match with quantifiers
 
-    26: new Test('#+', '123', new ExpectedMatch('123', '', 3, true)),
-    27: new Test('@+', 'àbcdéf', new ExpectedMatch('àbcdéf', '', 6, true)),
-    28: new Test('&+', 'abc_123', new ExpectedMatch('abc_123', '', 7, true)),
+    26: new Test('#+', '123', new ExpectedResult('123', '', true, 3)),
+    27: new Test('@+', 'àbcdéf', new ExpectedResult('àbcdéf', '', true, 6)),
+    28: new Test('&+', 'abc_123', new ExpectedResult('abc_123', '', true, 7)),
+
+    150: new Test("a&+", "a5", new ExpectedResult('a5', '', true, 2)),
+    151: new Test("a&+", "a", new ExpectedResult('a', '...', false, 1)),
+    152: new Test("a&+", "ab", new ExpectedResult('ab', '', true, 2)),
+    153: new Test("a&+", "abc", new ExpectedResult('abc', '', true, 3)),
+
+    154: new Test("a@+", "a", new ExpectedResult('a', '...', false, 1)),
+    155: new Test("a@+", "ab", new ExpectedResult('ab', '', true, 2)),
+    156: new Test("a@+", "a5", new ExpectedResult('a', '5', false)),
+    157: new Test("a@*", "a5", new ExpectedResult('a', '5', true, 1)),
+
+    158: new Test("a@*", "a", new ExpectedResult('a', 'a', true, 1)),
+    159: new Test("a@*", "ab", new ExpectedResult('ab', '', true, 2)),
+    160: new Test("a@*", "abc", new ExpectedResult('abc', '', true, 3)),
+
+    200: new Test("#", "a", new ExpectedResult('', 'a', false)),
+    201: new Test("\\d", "a", new ExpectedResult('', 'a', false)),
+    202: new Test("#", "1", new ExpectedResult('1', '', true, 1)),
+    203: new Test("\\d", "1", new ExpectedResult('1', '', true, 1)),
+    204: new Test("#", "15", new ExpectedResult('1', '5', true, 1)),
+    205: new Test("\\d", "15", new ExpectedResult('1', '5', true, 1)),
 
     // Actual match
 
-    29: new Test('".*"', '"abc"', new ExpectedMatch('"abc"', '', 5, true)),
-    30: new Test("'.*'", "'Je suis un zorba'", new ExpectedMatch("'Je suis un zorba'", '', 18, true)),
-    31: new Test('#+', '123', new ExpectedMatch('123', '', 3, true))
+    29: new Test('".*"', '"abc"', new ExpectedResult('"abc"', '', true, 5)),
+    30: new Test("'.*'", "'Je suis un zorba'", new ExpectedResult("'Je suis un zorba'", '', true, 18)),
+    31: new Test('#+', '123', new ExpectedResult('123', '', true, 3))
 }
 
-for (let [key, value] of Object.entries(tests))
+let to_execute = Object.keys(tests);
+//let to_execute = [156];
+
+//for (let [key, value] of Object.entries(tests))
+for (let key of to_execute)
 {
+    let value = tests[key];
     process.stdout.write('<' + key + '> ');
     value.test();
 }
