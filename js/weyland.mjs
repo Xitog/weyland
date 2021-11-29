@@ -44,6 +44,13 @@ class Char
         return (element === this.value && this.escaped);
     }
 
+    toRepr()
+    {
+        let s = this.escaped ? "\\" : "";
+        s += this.value;
+        return s;
+    }
+
     toString()
     {
         return 'Char |' + this.value + '| esc? ' + this.escaped;
@@ -85,7 +92,7 @@ class Element
         return this.quantifier;
     }
 
-    toString()
+    cardToString()
     {
         let card = "";
         if (this.min !== 1 || this.max !== 1)
@@ -105,6 +112,12 @@ class Element
                     break;
             }
         }
+        return card;
+    }
+
+    toString()
+    {
+        let card = this.cardToString();
         return this.constructor.name + " |" + this.value + "|" + card;
     }
 
@@ -175,8 +188,6 @@ Element.Normal = 0;
 Element.Greedy = 1;
 Element.Lazy = 2;
 Element.Possessive = 3;
-// Group
-Element.CloseGroup = ')';
 // Others
 Element.Alternative = '|';
 Element.Escape = '\\';
@@ -297,12 +308,7 @@ class Class extends Element
 
     toString()
     {
-        let card = "";
-        if (this.min !== 1 || this.max !== 1)
-        {
-            let max = (this.max === -1) ? "*" : this.max;
-            card = " {" + this.min + ", " + max + "}";
-        }
+        let card = this.cardToString();
         let nb = " (" + this.elements.length + ")";
         let inverted = (this.inverted) ? " inverted" : ""
         return "Class |" + this.value + "|" + card + nb + inverted;
@@ -351,19 +357,23 @@ Class.Invert = '^';
 Class.Range = '-';
 
 //-----------------------------------------------------------------------------
-// Sequence
+// Group
 //-----------------------------------------------------------------------------
 
-class Sequence extends Element
+class Group extends Element
 {
 
-    constructor(value, parent=null)
+    constructor(value, parent=null, elements=null)
     {
         super(value, parent);
-        this.elements = [];
+        this.elements = elements === null ? [] : elements;
+        for (let e of this.elements)
+        {
+            e.parent = this;
+        }
     }
 
-    add(element)
+    push(element)
     {
         this.elements.push(element);
     }
@@ -390,18 +400,20 @@ class Sequence extends Element
 
     toString()
     {
-        return 'Sequence |' + this.value + '| (' + this.elements.length + ')';
+        let card = this.cardToString();
+        return 'Group |' + this.value + '| (' + this.elements.length + ')' + card;
     }
 
     match(candidate , start=0, level=0, debug=null)
     {
         if (debug !== null)
         {
-            debug.push([level, 'Sequence#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start])
+            debug.push([level, 'Group#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start])
         }
         let matched = new MatchSet(this, candidate, false, start);
         let index_candidate = start;
         let index_regex = 0;
+        let nb_matched = 0;
         while (index_candidate < candidate.length && index_regex < this.elements.length)
         {
             let elem = this.elements[index_regex];
@@ -415,7 +427,7 @@ class Sequence extends Element
             {
                 break;
             }
-            // Test next sequence element against the minimal next
+            // Test next group element against the minimal next
             if (elem.getMax() > 1 && elem.getQuantifier() != Element.Possessive && index_regex + 1 < this.elements.length)
             {
                 let next = this.elements[index_regex + 1];
@@ -468,6 +480,14 @@ class Sequence extends Element
             {
                 debug.push([level + 1, '---> ' + res.toString() + ' = |' + res.getMatched(candidate) + '|']);
             }
+            if (index_regex === this.elements.length)
+            {
+                nb_matched += 1;
+                if (nb_matched < this.max)
+                {
+                    index_regex = 0; // Restart
+                }
+            }
             //let len = matched.reduce((a, b) => a.size() + b, 0);
             //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
             //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
@@ -475,10 +495,10 @@ class Sequence extends Element
         }
         if (debug !== null)
         {
-            debug.push([level, 'Sequence#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
+            debug.push([level, 'Group#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
         }
         // ???
-        matched.match = (index_regex === this.elements.length);
+        matched.match = (nb_matched > 0); // (index_regex === this.elements.length);
         // Si tous les suivants sont optionnels, c'est un match quand même
         let all_optional = true;
         for (let i = index_regex; i < this.elements.length; i++)
@@ -501,6 +521,8 @@ class Sequence extends Element
         return matched;
     }
 }
+Group.Open = '(';
+Group.Close = ')';
 
 //-----------------------------------------------------------------------------
 // La classe Regex
@@ -550,6 +572,27 @@ class Regex
         {
             temp.push(new Char(this.raw[this.raw.length-1], false));
         }
+        // Checks
+        if (temp.length === 0)
+        {
+            throw "A regex must have at least one char.";
+        }
+        if (temp[0].is(Element.ZeroOrMore) || temp[0].is(Element.ZeroOrOne) || temp[0].is(Element.OneOrMore))
+        {
+            throw "A regex cannot start with a quantifier.";
+        }
+        if (temp[0].is(Element.Alternative))
+        {
+            throw "A regex cannot start with an alternate char.";
+        }
+        if (temp[0].is(Element.CloseClass))
+        {
+            throw "A regex cannot start with a closing class char.";
+        }
+        if (temp[temp.length-1].is(Element.Escape))
+        {
+            throw "A regex cannot finish with an escaped char.";
+        }
         return temp;
     }
 
@@ -587,38 +630,41 @@ class Regex
         return res;
     }
 
-    compile()
+    find_next_symbol(text, start, symbol, counter_symbol=null)
     {
-        let temp = this.precompile();
-        this.root = new Sequence(this.pattern);
-        // Checks
-        if (temp.length === 0)
+        let index = null;
+        let level = 0;
+        for (let i = start ; i < text.length ; i++)
         {
-            throw "A regex must have at least one char.";
+            if (text[i].is(symbol) && level === 0)
+            {
+                index = i;
+                break;
+            }
+            else if (text[i].is(symbol) && level > 0)
+            {
+                level -= 1;
+            }
+            else if (counter_symbol !== null && text[i].is(counter_symbol))
+            {
+                level += 1;
+            }
         }
-        if (temp[0].is(Element.ZeroOrMore) || temp[0].is(Element.ZeroOrOne) || temp[0].is(Element.OneOrMore))
-        {
-            throw "A regex cannot start with a quantifier.";
-        }
-        if (temp[0].is(Element.Alternative))
-        {
-            throw "A regex cannot start with an alternate char.";
-        }
-        if (temp[0].is(Element.CloseClass))
-        {
-            throw "A regex cannot start with a closing class char.";
-        }
-        if (temp[temp.length-1].is(Element.Escape))
-        {
-            throw "A regex cannot finish with an escaped char.";
-        }
+        return index;
+    }
+
+    subcompile(temp, start, end, parent=null)
+    {
+        let elements = [];
+        let pattern = "";
         // Tree
-        for (let i = 0; i < temp.length; i++)
+        for (let i = start; i < end; i++)
         {
             let current = temp[i];
-            let prev = this.root.last();
+            pattern += current.toRepr();
+            let prev = elements.length > 0 ? elements[elements.length - 1] : null;
             // Classes
-            if (this.compile_specials(current, this.root.elements))
+            if (this.compile_specials(current, elements))
             {
                 // everything is done in the function, do nothing here.
             }
@@ -626,19 +672,18 @@ class Regex
             else if (current.is(Class.Open))
             {
                 let value = "";
-                let end = -1;
                 let members = [];
                 let inverted = false;
-                for (let j = i + 1; j < temp.length; j++)
+                let closing = this.find_next_symbol(temp, i + 1, Class.Close);
+                if (closing === null)
+                {
+                    throw "No ending ] for [ at " + i;
+                }
+                for (let j = i + 1; j < closing; j++)
                 {
                     if (j == i + 1 && temp[j].is(Class.Invert))
                     {
                         inverted = true;
-                    }
-                    else if (temp[j].is(Class.Close))
-                    {
-                        end = j;
-                        break;
                     }
                     else if (this.compile_specials(temp[j], members))
                     {
@@ -652,22 +697,18 @@ class Regex
                         value += temp[j].value;
                     }
                 }
-                if (end === -1)
-                {
-                    throw "No ending ] for [ at " + i;
-                }
                 if (members.length < 2)
                 {
                     throw "A custom class must have at least 2 elements."
                 }
-                this.root.elements.push(new Class(value, null, members, inverted));
-                i = end;
+                elements.push(new Class(value, null, members, inverted));
+                i = closing;
             }
             // Quantifiers
             else if (current.is(Element.OneOrMore)) // +
             {
                 // There was a previous modifier, this one is making it possessive
-                if (prev.min !== 1 || prev.max !== 1)
+                if (prev !== null && (prev.min !== 1 || prev.max !== 1))
                 {
                     prev.setQuantifier(Element.Possessive);
                 }
@@ -679,6 +720,10 @@ class Regex
             }
             else if (current.is(Element.ZeroOrMore)) // *
             {
+                if (prev === null)
+                {
+                    throw "Cannot start with *";
+                }
                 prev.min = 0;
                 prev.max = Infinity;
                 prev.setQuantifier(Element.Greedy);
@@ -686,7 +731,7 @@ class Regex
             else if (current.is(Element.ZeroOrOne)) // ?
             {
                 // There was a previous modifier, this one is making it lazy
-                if (prev.min !== 1 || prev.max !== 1)
+                if (prev !== null && (prev.min !== 1 || prev.max !== 1))
                 {
                     prev.setQuantifier(Element.Lazy);
                 }
@@ -696,11 +741,29 @@ class Regex
                     prev.setQuantifier(Element.Greedy);
                 }
             }
+            else if (current.is(Group.Open))
+            {
+                let closing = this.find_next_symbol(temp, i + 1, Group.Close, Group.Open);
+                if (closing === null)
+                {
+                    throw "No ending ) for ( at " + i;
+                }
+                elements.push(this.subcompile(temp, i + 1, closing, null));
+                i = closing;
+            }
             else
             {
-                this.root.add(new Element(current.value));
+                elements.push(new Element(current.value));
             }
         }
+        return new Group(pattern, parent, elements);
+    }
+
+    compile()
+    {
+        let temp = this.precompile();
+        this.root = this.subcompile(temp, 0, temp.length);
+        this.root.value = this.pattern; // Hack to have the full regex
         if (this.root.size() === 0)
         {
             throw "Impossible to have a regex with 0 element.";
@@ -732,6 +795,7 @@ Char.StartCode = "<START>";
 Char.EndCode = "<END>";
 
 Regex.Positions = [Char.Start, Char.End];
+
 Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
     Char.OpenGroup,
     Char.CloseGroup,
@@ -767,9 +831,9 @@ class Match
 
     equals(other)
     {
-        console.log("getMatched()", this.getMatched(), other.getMatched(),
-                  "match", this.match, other.match, "partial", this.partial, other.partial,
-                  "length", this.length, other.length);
+        //console.log("getMatched()", this.getMatched(), other.getMatched(),
+        //          "match", this.match, other.match, "partial", this.partial, other.partial,
+        //          "length", this.length, other.length);
         return (this.element === other.element && this.getMatched() === other.getMatched() &&
                 this.match === other.match && this.partial === other.partial &&
                 this.length === other.length);
@@ -945,6 +1009,20 @@ class MatchSet extends Match
         }
     }
 
+    getNbElementMatched()
+    {
+        return this.matches.length;
+    }
+
+    get(index)
+    {
+        if (index < 0 || index >= this.matches.length)
+        {
+            throw "Out of range index: " + index + " should be between 0 and inferior to " + this.matches.length;
+        }
+        return this.matches[index];
+    }
+
     getMatched()
     {
         if (!this.match && !this.partial)
@@ -961,22 +1039,6 @@ class MatchSet extends Match
 }
 
 /*
-class Match
-{
-    getNbElementMatched()
-    {
-        return this.element_matches.length;
-    }
-
-    get(index)
-    {
-        if (index < 0 || index >= this.element_matches.length)
-        {
-            throw "Out of range index: " + index + " should be between 0 and inferior to " + this.element_matches.length;
-        }
-        return this.element_matches[index];
-    }
-
     isOverload()
     {
         return (this.length !== null && this.length <= this.text.length);
@@ -994,4 +1056,4 @@ class Match
 }
 */
 
-export {Regex, Sequence, Class, Special, Match};
+export {Regex, Group, Class, Special, Match, MatchSet};

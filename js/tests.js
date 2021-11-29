@@ -1,4 +1,4 @@
-import {Regex, Match} from "./weyland.mjs";
+import {Regex, Match, MatchSet} from "./weyland.mjs";
 
 var num = 0;
 var neutral = 0;
@@ -65,6 +65,18 @@ class Test
         this.expected = expected;
     }
 
+    display_result(m, level=0)
+    {
+        console.log("    ".repeat(level) + m.toString());
+        if (m instanceof MatchSet)
+        {
+            for (let i=0; i < m.getNbElementMatched(); i++)
+            {
+                this.display_result(m.get(i), level + 1);
+            }
+        }
+    }
+
     test()
     {
         num += 1;
@@ -83,7 +95,8 @@ class Test
                 //console.log('    '.repeat(d[0]) + d[0].toString().padStart(3, '0') + '. ' + d[1]);
                 console.log('    '.repeat(d[0]) + d[1]);
             }
-            console.log(m.toString());
+            console.log("\n");
+            this.display_result(m);
             if (this.expected !== null && this.expected instanceof ExpectedResult)
             {
                 let expected_match = new Match(r.root, this.expected.text); // Because it'Seq with is linked to Match instance. Should be changed.
@@ -93,13 +106,13 @@ class Test
                 expected_match.partial = this.expected.partial;
                 if (m.equals(expected_match))
                 {
-                    console.log('=== OK ===\n');
+                    console.log('\n=== OK ===\n');
                     good += 1;
                     return 1;
                 }
                 else
                 {
-                    console.log('!!! KO !!!');
+                    console.log('\n!!! KO !!!');
                     console.log('Expected:', this.expected.toString());
                     console.log('Result  :', m.toString(), "\n");
                     bad += 1;
@@ -211,7 +224,14 @@ var tests = {
 
     29: new Test('".*"', '"abc"', new ExpectedResult('"abc"', '', true, 5)),
     30: new Test("'.*'", "'Je suis un zorba'", new ExpectedResult("'Je suis un zorba'", '', true, 18)),
-    31: new Test('#+', '123', new ExpectedResult('123', '', true, 3))
+    31: new Test('#+', '123', new ExpectedResult('123', '', true, 3)),
+
+    // Group
+
+    1000: new Test("(ab)(cd)", "abcd", new ExpectedResult('abcd', '', true, 4)), // My first group
+    1001: new Test("(ab)*", "ababab", new ExpectedResult('ababab', '', true, 6)),
+    1002: new Test("ab(cd)*ef", "abcdef", new ExpectedResult('abcdef', '', true, 6)),
+    1003: new Test("ab(cd)*ef", "abef", new ExpectedResult('abef', '', true, 4))
 }
 
 let to_execute = Object.keys(tests);
