@@ -77,25 +77,27 @@ class Test
         }
     }
 
-    test()
+    test(key)
     {
         num += 1;
         let title = num.toString().padStart(3, 0) + '. Testing: pattern=|' + this.pattern + '|';
         title += (this.text.length !== 0) ? ' vs candidate=|' + this.text + '|': "";
         console.log(title);
-        console.log('----------');
+        console.log('======================================================================');
         let r = new Regex(this.pattern);
+        console.log('\nRegex:\n------\n');
         console.log(r.info());
         if (this.text.length !== 0)
         {
             let debug = [];
+            console.log('\nMatching:\n---------\n');
             let m = r.match(this.text, debug);
             for (let d of debug)
             {
                 //console.log('    '.repeat(d[0]) + d[0].toString().padStart(3, '0') + '. ' + d[1]);
                 console.log('    '.repeat(d[0]) + d[1]);
             }
-            console.log("\n");
+            console.log('\nResults:\n--------\n');
             this.display_result(m);
             if (this.expected !== null && this.expected instanceof ExpectedResult)
             {
@@ -106,13 +108,13 @@ class Test
                 expected_match.partial = this.expected.partial;
                 if (m.equals(expected_match))
                 {
-                    console.log('\n=== OK ===\n');
+                    console.log('\n<' + key + '> === OK ===\n');
                     good += 1;
                     return 1;
                 }
                 else
                 {
-                    console.log('\n!!! KO !!!');
+                    console.log('\n<' + key + '> !!! KO !!!');
                     console.log('Expected:', this.expected.toString());
                     console.log('Result  :', m.toString(), "\n");
                     bad += 1;
@@ -242,7 +244,7 @@ for (let key of to_execute)
 {
     let value = tests[key];
     process.stdout.write('<' + key + '> ');
-    value.test();
+    value.test(key);
 }
 
 console.log("Good    :", good);
