@@ -123,7 +123,7 @@ class Element
 
     info(level=0, prefix='')
     {
-        return '   '.repeat(level) + prefix + this.toString();
+        return '    '.repeat(level) + prefix + this.toString();
     }
 
     isOptionnal()
@@ -189,7 +189,6 @@ Element.Greedy = 1;
 Element.Lazy = 2;
 Element.Possessive = 3;
 // Others
-Element.Alternative = '|';
 Element.Escape = '\\';
 // For clean display
 Element.NewLineCode = "<NL>";
@@ -385,10 +384,14 @@ class Group extends Element
 
     info(level=0, prefix='')
     {
-        let s = '    '.repeat(level) + this.toString() + "\n";
+        let s = '    '.repeat(level) + prefix + this.toString() + "\n";
         for (let i = 0; i < this.elements.length; i++)
         {
-            s +=  this.elements[i].info(level + 1, i.toString().padStart(2, '0') + '. ') + "\n";
+            s +=  this.elements[i].info(level + 1, i.toString().padStart(2, '0') + '. ');
+            if (i + 1 < this.elements.length)
+            {
+                s += "\n";
+            }
         }
         return s;
     }
@@ -425,7 +428,24 @@ class Group extends Element
             let res = elem.match(candidate, index_candidate, level + 2, debug);
             if (!res.isMatch())
             {
-                break;
+
+                if (elem.getMin() === 0  && index_regex + 1 < this.elements.length)
+                {
+                    if (debug !== null)
+                    {
+                        debug.push([level + 1, '---> no result, passing to next']);
+                    }
+                    index_regex += 1;
+                    continue;
+                }
+                else
+                {
+                    if (debug !== null)
+                    {
+                        debug.push([level + 1, '---> no result, breaking']);
+                    }
+                    break;
+                }
             }
             // Test next group element against the minimal next
             if (elem.getMax() > 1 && elem.getQuantifier() != Element.Possessive && index_regex + 1 < this.elements.length)
@@ -525,6 +545,35 @@ Group.Open = '(';
 Group.Close = ')';
 
 //-----------------------------------------------------------------------------
+// Choice
+//-----------------------------------------------------------------------------
+
+class Choice extends Element
+{
+    constructor(value, parent=null, elements=null)
+    {
+        super(value, parent);
+        this.elements = elements === null ? [] : elements;
+        for (let e of this.elements)
+        {
+            e.parent = this;
+        }
+    }
+
+    size()
+    {
+        return this.elements.length;
+    }
+
+    toString()
+    {
+        let card = this.cardToString();
+        return 'Choice |' + this.value + '| (' + this.elements.length + ')' + card;
+    }
+}
+Choice.Alternative = '|';
+
+//-----------------------------------------------------------------------------
 // La classe Regex
 //-----------------------------------------------------------------------------
 
@@ -581,11 +630,11 @@ class Regex
         {
             throw "A regex cannot start with a quantifier.";
         }
-        if (temp[0].is(Element.Alternative))
+        if (temp[0].is(Choice.Alternative))
         {
             throw "A regex cannot start with an alternate char.";
         }
-        if (temp[0].is(Element.CloseClass))
+        if (temp[0].is(Class.Close))
         {
             throw "A regex cannot start with a closing class char.";
         }
