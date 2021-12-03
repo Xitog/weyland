@@ -548,27 +548,40 @@ Group.Close = ')';
 // Choice
 //-----------------------------------------------------------------------------
 
-class Choice extends Element
+class Choice extends Group
 {
-    constructor(value, parent=null, elements=null)
-    {
-        super(value, parent);
-        this.elements = elements === null ? [] : elements;
-        for (let e of this.elements)
-        {
-            e.parent = this;
-        }
-    }
-
-    size()
-    {
-        return this.elements.length;
-    }
-
     toString()
     {
         let card = this.cardToString();
         return 'Choice |' + this.value + '| (' + this.elements.length + ')' + card;
+    }
+
+    match(candidate , start=0, level=0, debug=null)
+    {
+        if (debug !== null)
+        {
+            debug.push([level, 'Choice#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start]);
+        }
+        let index_option = 0;
+        while (index_option < this.elements.length)
+        {
+            let elem = this.elements[index_option];
+            if (debug !== null)
+            {
+                debug.push([level + 1, 'loop io=' + index_option + ' ' +
+                            candidate.substring(start) + ' vs '+ elem.toString()]);
+            }
+            let res = elem.match(candidate, start, level + 2, debug);
+            if (!res.isMatch())
+            {
+                index_option += 1;
+            }
+            else
+            {
+                res.element = this;
+                return res;
+            }
+        }
     }
 }
 Choice.Alternative = '|';
@@ -704,6 +717,7 @@ class Regex
 
     subcompile(temp, start, end, parent=null)
     {
+        let multigroups = []; // Si on a un choice, on aura plusieurs groupes dedans
         let elements = [];
         let pattern = "";
         // Tree
@@ -800,12 +814,60 @@ class Regex
                 elements.push(this.subcompile(temp, i + 1, closing, null));
                 i = closing;
             }
+            else if (current.is(Choice.Alternative))
+            {
+                // Save current
+                let g = null;
+                if (elements.length > 1)
+                {
+                    g = new Group(pattern, null, elements);
+                }
+                else if (elements.length === 1)
+                {
+                    g = elements[0];
+                }
+                else
+                {
+                    throw "No alternative detected";
+                }
+                multigroups.push(g); // Can hold groups or elements for a choice
+                // Reset current
+                pattern = '';
+                elements = [];
+            }
             else
             {
                 elements.push(new Element(current.value));
             }
         }
-        return new Group(pattern, parent, elements);
+        if (multigroups.length === 0)
+        {
+            return new Group(pattern, parent, elements);
+        }
+        else
+        {
+            // Save last (repeated)
+            let g = null;
+            if (elements.length > 1)
+            {
+                g = new Group(pattern, null, elements);
+            }
+            else if (elements.length === 1)
+            {
+                g = elements[0];
+            }
+            else
+            {
+                throw "No alternative detected";
+            }
+            multigroups.push(g); // Can hold groups or elements for a choice
+            let complete_pattern = "";
+            for (let g of multigroups)
+            {
+                complete_pattern += g.pattern;
+            }
+            return new Choice(complete_pattern, parent, multigroups);
+        }
     }
 
     compile()
@@ -880,9 +942,13 @@ class Match
 
     equals(other)
     {
-        //console.log("getMatched()", this.getMatched(), other.getMatched(),
-        //          "match", this.match, other.match, "partial", this.partial, other.partial,
-        //          "length", this.length, other.length);
+        /*
+        console.log("    getMatched()", this.getMatched(), other.getMatched(), "\n",
+                  "   match", this.match, other.match, "\n",
+                  "   partial", this.partial, other.partial, "\n",
+                  "   length", this.length, other.length, "\n",
+                  "   element", this.element.toString(), other.element.toString());
+        */
         return (this.element === other.element && this.getMatched() === other.getMatched() &&
                 this.match === other.match && this.partial === other.partial &&
                 this.length === other.length);
@@ -1087,22 +1153,6 @@ class MatchSet extends Match
     }
 }
 
-/*
-    isOverload()
-    {
-        return (this.length !== null && this.length <= this.text.length);
-    }
-
-    getOverload()
-    {
-        if (this.length === null || this.length === this.text.length)
-        {
-            return '';
-        } else {
-            return this.text.substring(this.length);
-        }
-    }
-}
-*/
+// On abandonne le concept de Overload (ce qui reste après le match)
 
 export {Regex, Group, Class, Special, Match, MatchSet};

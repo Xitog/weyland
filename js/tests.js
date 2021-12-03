@@ -233,7 +233,12 @@ var tests = {
     1000: new Test("(ab)(cd)", "abcd", new ExpectedResult('abcd', '', true, 4)), // My first group
     1001: new Test("(ab)*", "ababab", new ExpectedResult('ababab', '', true, 6)),
     1002: new Test("ab(cd)*ef", "abcdef", new ExpectedResult('abcdef', '', true, 6)),
-    1003: new Test("ab(cd)*ef", "abef", new ExpectedResult('abef', '', true, 4))
+    1003: new Test("ab(cd)*ef", "abef", new ExpectedResult('abef', '', true, 4)),
+
+    // Choice
+    1100: new Test("a|b", "b", new ExpectedResult('b', '', true, 1)),
+    1101: new Test("ab|cd", "cd", new ExpectedResult('cd', '', true, 2)),
+    1102: new Test("(a|d)c", "ac", new ExpectedResult('ac', '', true, 2))
 }
 
 let to_execute = Object.keys(tests);
