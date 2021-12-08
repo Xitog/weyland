@@ -12,6 +12,16 @@
  * Todo : invert Custom Classes, range in Custom Classes, group, named group, match
  */
 
+function d(level, s)
+{
+    console.log('    '.repeat(level) + s);
+}
+
+function w(s)
+{
+    return s.replace('\n', '<NL>').replace(' ', '<WS>');
+}
+
 //-----------------------------------------------------------------------------
 // La classe Char
 //-----------------------------------------------------------------------------
@@ -47,7 +57,8 @@ class Char
     toRepr()
     {
         let s = this.escaped ? "\\" : "";
-        s += this.value;
+        let v = this.value === '\n' ? '<NL>' : this.value;
+        s += v;
         return s;
     }
 
@@ -75,7 +86,7 @@ class Element
 
     getPattern()
     {
-        return this.value;
+        return w(this.value);
     }
 
     setQuantifier(qt)
@@ -118,7 +129,7 @@ class Element
     toString()
     {
         let card = this.cardToString();
-        return this.constructor.name + " |" + this.value + "|" + card;
+        return this.constructor.name + " " + this.getPattern() + card;
     }
 
     info(level=0, prefix='')
@@ -156,10 +167,10 @@ class Element
         return this.max;
     }
 
-    match(candidate , start=0, level=0, debug=null)
+    match(candidate , start=0, level=0, debug=false)
     {
         let matched = 0;
-        for (let i = start; i < candidate.length && matched <= this.max; i++)
+        for (let i = start; i < candidate.length && matched < this.max; i++)
         {
             if (candidate[i] === this.value)
             {
@@ -169,9 +180,9 @@ class Element
             {
                 break;
             }
-            if (debug !== null)
+            if (debug)
             {
-                debug.push([level, 'Element#match: ' + candidate[i] + " vs " + this + " matched=" + matched]);
+                d(level, 'Element#match: ' + candidate[i] + " vs " + this + " matched=" + matched + " @" + i);
             }
         }
         let res = (matched >= this.min) ? true : false;
@@ -209,7 +220,7 @@ class Special extends Element
         }
     }
 
-    match(candidate , start=0, level=0, debug=null)
+    match(candidate , start=0, level=0, debug=false)
     {
         let matched = 0;
         let res = null;
@@ -238,9 +249,9 @@ class Special extends Element
             if (res)
             {
                 matched += 1;
-                if (debug !== null)
+                if (debug)
                 {
-                    debug.push([level, 'Special#match: ' + candidate[i] + " vs " + this + " matched= " + matched + " / " + this.max]);
+                    d(level, 'Special#match: ' + candidate[i] + " vs " + this + " matched= " + matched + " / " + this.max);
                 }
             }
             else
@@ -305,12 +316,21 @@ class Class extends Element
         this.elements = elements;
     }
 
+    getPattern()
+    {
+        if (this.inverted)
+        {
+            return '[^' + this.value + ']';
+        }
+        return '[' + this.value + ']';
+    }
+
     toString()
     {
         let card = this.cardToString();
         let nb = " (" + this.elements.length + ")";
         let inverted = (this.inverted) ? " inverted" : ""
-        return "Class |" + this.value + "|" + card + nb + inverted;
+        return "Class " + this.getPattern() + ' ' + card + nb + inverted;
     }
 
     info(level=0, prefix='')
@@ -318,35 +338,88 @@ class Class extends Element
         return '    '.repeat(level) + prefix + this.toString();
     }
 
-    match(candidate , start=0, level=0, debug=null)
+    match_inverted(candidate, start=0, level=0, debug=false)
     {
-        let matched = [];
-        let res = null;
-        for (let i = start; i < candidate.length && matched.length <= this.max; i++)
+        if (debug)
         {
-            for (let e of this.elements)
+            d(level, 'Class#match_inverted: START cand[' + start + ',]=|' + w(candidate.substring(start)) + "| vs class=" + this.getPattern());
+        }
+        let nb_matched = 0;
+        let matched = false;
+        for (let i = start; i < candidate.length && nb_matched < this.max; i++)
+        {
+            for (let elem of this.elements)
             {
-                if (e.match(candidate, i, level + 1, debug) !== null)
+                let res = elem.match(candidate, i, level + 1, debug);
+                if (res.isMatch())
                 {
-                    res = e;
+                    matched = true;
                     break;
                 }
             }
-            if (res !== null)
+            if (matched)
             {
-                matched.push(res);
+                break;
             }
-            if (debug !== null)
+            else
             {
-                debug.push([level, 'Class#match: ' + candidate[i] + " vs " + this.value + " matched=" + matched]);
+                nb_matched += 1;
             }
         }
-        res = false;
-        if (matched.length >= this.min)
+        let final_matched = nb_matched >= this.min ? true : false;
+        if (debug)
         {
-            res = true;
+            d(level, 'Class#match_inverted: END |' + w(candidate.substring(start, start + nb_matched)) + "| vs " + this.getPattern() + " matched=" + final_matched);
         }
-        return new Match(matched, candidate, res, start, matched.length);
+        if (!final_matched)
+        {
+            let partial = nb_matched > 0 ? true : false;
+            return new Match(this, '', false, start, 0, partial);
+        }
+        else
+        {
+            return new Match(this, candidate, true, start, nb_matched, false);
+        }
+    }
+
+    match(candidate , start=0, level=0, debug=false)
+    {
+        if (this.inverted)
+        {
+            return this.match_inverted(candidate, start, level, debug);
+        }
+        if (debug)
+        {
+            d(level, 'Class#match: START cand[' + start + ',]=|' + w(candidate.substring(start)) + "| vs class=[" + this.value + "]");
+        }
+        let matched = new MatchSet(this, candidate, false, start);
+        for (let i = start; i < candidate.length && matched.raw_size() < this.max; i++)
+        {
+            for (let elem of this.elements)
+            {
+                let res = elem.match(candidate, i, level + 1, debug);
+                if (debug)
+                {
+                    d(level + 1, '---> ' + res.toString() + ' = |' + w(res.getMatched(candidate)) + '|');
+                }
+                if (res.isMatch())
+                {
+                    matched.push(res);
+                    break;
+                }
+            }
+        }
+        // MatchSet#size return null if there is no match (=dangerous!)
+        // We use raw_size to have always the true size matched
+        if (matched.raw_size() >= this.min)
+        {
+            matched.match = true;
+        }
+        if (debug)
+        {
+            d(level, 'Class#match: END ' + w(candidate) + " vs [" + this.value + "] matched=" + matched.match);
+        }
+        return matched;
     }
 }
 // Custom classes
@@ -370,6 +443,11 @@ class Group extends Element
         {
             e.parent = this;
         }
+    }
+
+    getPattern()
+    {
+        return '(' + this.value + ')';
     }
 
     push(element)
@@ -404,14 +482,14 @@ class Group extends Element
     toString()
     {
         let card = this.cardToString();
-        return 'Group |' + this.value + '| (' + this.elements.length + ')' + card;
+        return 'Group ' + this.getPattern() + ' (' + this.elements.length + ')' + card;
     }
 
-    match(candidate , start=0, level=0, debug=null)
+    match(candidate , start=0, level=0, debug=false)
     {
-        if (debug !== null)
+        if (debug)
         {
-            debug.push([level, 'Group#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start])
+            d(level, 'Group#match: START cand=|' + w(candidate) + '| vs seq=|' + this.value + '| start=' + start);
         }
         let matched = new MatchSet(this, candidate, false, start);
         let index_candidate = start;
@@ -420,10 +498,10 @@ class Group extends Element
         while (index_candidate < candidate.length && index_regex < this.elements.length)
         {
             let elem = this.elements[index_regex];
-            if (debug !== null)
+            if (debug)
             {
-                debug.push([level + 1, 'loop ic=' + index_candidate + ' ir=' + index_regex + ' ' +
-                            candidate.substring(index_candidate) + ' vs '+ elem.toString()]);
+                d(level + 1, 'group ic=' + index_candidate + ' ir=' + index_regex + ' ' +
+                            w(candidate.substring(index_candidate)) + ' vs '+ elem.toString());
             }
             let res = elem.match(candidate, index_candidate, level + 2, debug);
             if (!res.isMatch())
@@ -431,18 +509,18 @@ class Group extends Element
 
                 if (elem.getMin() === 0  && index_regex + 1 < this.elements.length)
                 {
-                    if (debug !== null)
+                    if (debug)
                     {
-                        debug.push([level + 1, '---> no result, passing to next']);
+                        d(level + 1, '---> no result, passing to next');
                     }
                     index_regex += 1;
                     continue;
                 }
                 else
                 {
-                    if (debug !== null)
+                    if (debug)
                     {
-                        debug.push([level + 1, '---> no result, breaking']);
+                        d(level + 1, '---> no result, breaking');
                     }
                     break;
                 }
@@ -458,13 +536,13 @@ class Group extends Element
                 }
                 else // Element.Normal
                 {
-                    index_candidate_start_next += res.size() - 1; // Arbitrary
+                    index_candidate_start_next += res.size();
                 }
-                if (debug !== null)
+                if (debug)
                 {
-                    debug.push([level + 2, '???? next ic=' + index_candidate_start_next + ' ir=' +
-                                (index_regex + 1) + ' ' + candidate.substring(index_candidate_start_next) + ' vs ' +
-                                next.toString() + ' (' + (res.size() - elem.getMin()) + ' chars of freedom)']);
+                    d(level + 2, '???? next ic=' + index_candidate_start_next + ' ir=' +
+                                (index_regex + 1) + ' ' + w(candidate.substring(index_candidate_start_next)) + ' vs ' +
+                                next.toString() + ' (' + (res.size() - elem.getMin()) + ' chars of freedom)');
                 }
                 let next_res = next.match(candidate, index_candidate_start_next, level + 3, debug);
                 if (next_res !== null)
@@ -477,28 +555,28 @@ class Group extends Element
                     {
                         if (index_candidate + res.size() === candidate.length && index_regex < this.elements.length - 1) // end of string but not end of regex
                         {
-                            res.reduce(1); // Arbitrary
+                            res.reduce(1, level + 1, debug); // 1 is Arbitrary
                         }
                     }
-                    if (debug !== null)
+                    if (debug)
                     {
-                        debug.push([level + 2, '---> ' + next_res.toString() + ' = |' + next_res.getMatched(candidate) + '|']);
+                        d(level + 2, '---> ' + next_res.toString());
                     }
                 }
                 else
                 {
-                    if (debug !== null)
+                    if (debug)
                     {
-                        debug.push([level + 2, '---> no result']);
+                        d(level + 2, '---> no result');
                     }
                 }
             }
             matched.push(res);
             index_regex += 1;
             index_candidate += res.size();
-            if (debug !== null)
+            if (debug)
             {
-                debug.push([level + 1, '---> ' + res.toString() + ' = |' + res.getMatched(candidate) + '|']);
+                d(level + 1, '---> ' + res.toString() + ' = |' + w(res.getMatched(candidate)) + '|');
             }
             if (index_regex === this.elements.length)
             {
@@ -513,9 +591,9 @@ class Group extends Element
             //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
             //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
         }
-        if (debug !== null)
+        if (debug)
         {
-            debug.push([level, 'Group#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent]);
+            d(level, 'Group#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent);
         }
         // ???
         matched.match = (nb_matched > 0); // (index_regex === this.elements.length);
@@ -550,38 +628,72 @@ Group.Close = ')';
 
 class Choice extends Group
 {
+    getPattern()
+    {
+        let s = '(';
+        for (let e of this.elements)
+        {
+            s += e.getPattern() + '|';
+        }
+        if (s.length > 1)
+        {
+            s = s.substring(0, s.length-1);
+        }
+        s += ')'
+        return s;
+    }
+
     toString()
     {
         let card = this.cardToString();
-        return 'Choice |' + this.value + '| (' + this.elements.length + ')' + card;
+        return 'Choice ' + this.getPattern() + ' (' + this.elements.length + ')' + card;
     }
 
-    match(candidate , start=0, level=0, debug=null)
+    match(candidate , start=0, level=0, debug=false)
     {
-        if (debug !== null)
+        if (debug)
         {
-            debug.push([level, 'Choice#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start]);
+            d(level, 'Choice#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start);
         }
-        let index_option = 0;
-        while (index_option < this.elements.length)
+        let matched = new MatchSet(this, candidate, false, start);
+        let index_candidate = start;
+        while (matched.raw_size() < this.getMax() && index_candidate < candidate.length)
         {
-            let elem = this.elements[index_option];
-            if (debug !== null)
+            let index_option = 0;
+            while (index_option < this.elements.length)
             {
-                debug.push([level + 1, 'loop io=' + index_option + ' ' +
-                            candidate.substring(start) + ' vs '+ elem.toString()]);
+                let elem = this.elements[index_option];
+                if (debug)
+                {
+                    d(level + 1, 'choice ic=' + index_candidate + ' io=' + index_option + ' ' +
+                                w(candidate.substring(index_candidate)) + ' vs '+ elem.toString());
+                }
+                let res = elem.match(candidate, index_candidate, level + 2, debug);
+                if (!res.isMatch())
+                {
+                    index_option += 1;
+                }
+                else
+                {
+                    res.setElement(this);
+                    matched.push(res);
+                    break;
+                }
             }
-            let res = elem.match(candidate, start, level + 2, debug);
-            if (!res.isMatch())
+            index_candidate += 1;
+        }
+        if (matched.raw_size() >= this.getMin())
+        {
+            matched.match = true;
+        }
+        else // Setting partial on last result
+        {
+            if (matched.getNbElementMatched() > 0 && matched.get(matched.getNbElementMatched() - 1).isPartial())
             {
-                index_option += 1;
-            }
-            else
-            {
-                res.element = this;
-                return res;
+                matched.partial = true;
             }
         }
+        return matched;
     }
 }
 Choice.Alternative = '|';
@@ -625,8 +737,18 @@ class Regex
             if (current === "\\" && !escaped)
             {
                 escaped = true;
-            } else {
-                temp.push(new Char(current, escaped));
+            }
+            else
+            {
+                if (escaped && !Regex.Escapables.includes(current))
+                {
+                    temp.push(new Char("\\", false));
+                    temp.push(new Char(current, false));
+                }
+                else
+                {
+                    temp.push(new Char(current, escaped));
+                }
                 escaped = false;
             }
         }
@@ -759,6 +881,7 @@ class Regex
                         members.push(new Element(temp[j].value));
                         value += temp[j].value;
                     }
+                    pattern += temp[j].toRepr();
                 }
                 if (members.length < 2)
                 {
@@ -766,6 +889,7 @@ class Regex
                 }
                 elements.push(new Class(value, null, members, inverted));
                 i = closing;
+                pattern += temp[closing].toRepr();
             }
             // Quantifiers
             else if (current.is(Element.OneOrMore)) // +
@@ -864,7 +988,7 @@ class Regex
             let complete_pattern = "";
             for (let g of multigroups)
             {
-                complete_pattern += g.pattern;
+                complete_pattern += g.value;
             }
             return new Choice(complete_pattern, parent, multigroups);
         }
@@ -881,7 +1005,7 @@ class Regex
         }
     }
 
-    match(text, debug=null)
+    match(text, debug)
     {
         return this.root.match(text, 0, 0, debug);
     }
@@ -890,9 +1014,9 @@ class Regex
 // Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
 // Added (3) : @ # &
 
+/*
 Char.Start = '^';
 Char.End = '$';
-Char.OpenGroup = '(';
 
 Char.NameGroup = '?'
 Char.OpenNameGroup = '<';
@@ -904,24 +1028,36 @@ Char.SeparatorRepeat = ',';
 
 Char.StartCode = "<START>";
 Char.EndCode = "<END>";
+*/
 
-Regex.Positions = [Char.Start, Char.End];
-
-Regex.Escapables = Regex.Modifiers + Regex.Classes + Regex.Positions + [
-    Char.OpenGroup,
-    Char.CloseGroup,
-    Char.NameGroup,
-    Char.OpenNameGroup,
-    Char.CloseNameGroup,
-    Char.OpenClass,
-    Char.CloseClass,
-    Char.InvertClass,
-    Char.RangeClass,
-    Char.OpenRepeat,
-    Char.CloseRepeat,
-    Char.SeparatorRepeat,
-    Char.Alternative,
-    Char.Escape];
+Regex.Escapables = [
+    // Quantifiers
+    Element.ZeroOrOne,       // ?
+    Element.OneOrMore,       // +
+    Element.ZeroOrMore,      // *
+    // Others
+    Element.Escape,          // \
+    // Specials
+    Special.Alpha,           // @
+    Special.AlphaEscaped,    // a
+    Special.Digit,           // #
+    Special.DigitEscaped,    // d
+    Special.AlphaNum,        // &
+    Special.AlphaNumEscaped, // w
+    Special.Space,           // ° => \t, \n, \f
+    Special.SpaceEscaped,    // s
+    Special.Any,             // .
+    // Custom classes
+    Class.Open,              // [
+    Class.Close,             // ]
+    Class.Invert,            // ^
+    Class.Range,             // -
+    // Groups
+    Group.Open,              // (
+    Group.Close,             // )
+    // Choices
+    Choice.Alternative       // |
+];
 
 //-----------------------------------------------------------------------------
 // La classe Match
@@ -931,13 +1067,18 @@ class Match
 {
     constructor(element, text, match=false, start=null, length=null, partial=false)
     {
-        this.element = element; // Regex element
+        this.elementx = element; // Regex element
         this.text = text;       // Text candidate
         this.start = start;     // Start of the match in text candidate
         this.length = length;   // Length of candidate text matched
         this.match = match;     // Matched or not?
         this.partial = partial; // In case of not matching, is it due to not enough chars?
         //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
+    }
+
+    setElement(e)
+    {
+        this.elementx = e;
     }
 
     equals(other)
@@ -947,9 +1088,9 @@ class Match
                   "   match", this.match, other.match, "\n",
                   "   partial", this.partial, other.partial, "\n",
                   "   length", this.length, other.length, "\n",
-                  "   element", this.element.toString(), other.element.toString());
+                  "   element", this.elementx.toString(), other.elementx.toString());
         */
-        return (this.element === other.element && this.getMatched() === other.getMatched() &&
+        return (this.elementx === other.elementx && this.getMatched() === other.getMatched() &&
                 this.match === other.match && this.partial === other.partial &&
                 this.length === other.length);
     }
@@ -964,16 +1105,21 @@ class Match
         return this.match;
     }
 
-    reduce(length=null)
+    reduce(length=null, level=0, debug)
     {
+        if (debug)
+        {
+            let len = (length === null) ? 'to min' : length;
+            d(level, '!!!! reduce ' + len);
+        }
         if (length === null)
         {
-            this.length = this.element.getMin();
+            this.length = this.elementx.getMin();
         }
         else
         {
-            this.length -= length;
-            if (this.length < this.element.getMin())
+            this.length -= length; // Length can be reduced to 0
+            if (this.length < this.elementx.getMin())
             {
                 throw "Illogical match: can't be reduced lower than element min.";
             }
@@ -987,19 +1133,35 @@ class Match
         return this.length;
     }
 
+    getPositionString()
+    {
+        if (this.size() === 1)
+        {
+            return '@' + this.start;
+        }
+        else if (this.size() === 0)
+        {
+            return '';
+        }
+        else
+        {
+            return '(' + this.start + ' to ' + (this.start + this.size() - 1) + ')';
+        }
+    }
+
     toString()
     {
         if (this.match)
         {
-            return '<Match matched |' + this.getMatched() + '| #' + this.length + ' (' + this.start + ' to ' + (this.start + this.length - 1) + ')>';
+            return 'Match {matched |' + w(this.getMatched()) + '| #' + this.length + ' ' + this.getPositionString() + '}';
         }
         else if (this.partial)
         {
-            return '<Match partial |' + this.getMatched() + '| #' + this.length + ' ('  + this.start + ') >';
+            return 'Match {partial |' + w(this.getMatched()) + '| #' + this.length + ' '  + this.getPositionString() + '}';
         }
         else
         {
-            return '<Match none>';
+            return 'Match {none}';
         }
     }
 
@@ -1070,7 +1232,7 @@ class MatchSet extends Match
         }
     }
 
-    reduce(length=null)
+    reduce(length=null, level=0, debug=false) // level & debug not used
     {
         if (length === null)
         {
@@ -1086,13 +1248,8 @@ class MatchSet extends Match
         }
     }
 
-    // Pas de surchage de length en JavaScript
-    size()
+    raw_size()
     {
-        if (!this.match && !this.partial)
-        {
-            return null;
-        }
         let total = null;
         for (let m of this.matches)
         {
@@ -1107,16 +1264,22 @@ class MatchSet extends Match
         }
         return total;
     }
+    // Pas de surchage de length en JavaScript
+    size()
+    {
+        if (!this.match && !this.partial)
+        {
+            return null;
+        }
+        return this.raw_size();
+    }
 
     toString()
     {
-        if (this.match)
+        if (this.match || this.partial)
         {
-            return '<MatchSet(' + this.matches.length + ') matched |' + this.getMatched() + '| #' + this.size() + ' (' + this.start + ' to ' + (this.start + this.size() - 1) + ')>';
-        }
-        else if (this.partial)
-        {
-            return '<MatchSet(' + this.matches.length + ') partial |' + this.getMatched() + '| #' + this.size() + ' ('  + this.start + ') >';
+            let res = this.match ? 'matched' : 'partial';
+            return '<MatchSet(' + this.matches.length + ') ' + res + ' |' + w(this.getMatched()) + '| #' + this.size() + ' ' + this.getPositionString() + '>';
         }
         else
         {

@@ -1,5 +1,7 @@
 import {Regex, Match, MatchSet} from "./weyland.mjs";
 
+console.time("Elapsed");
+
 var num = 0;
 var neutral = 0;
 var good = 0;
@@ -20,6 +22,11 @@ class ExpectedResult
         if (result && length === null)
         {
             throw "A matching result must have a length";
+        }
+        if (result && good.length !== length)
+        {
+            throw "A good part of a matching result must have the same length than specified: " +
+                    good + " is " + good.length + " whereas expected length is " + length;
         }
         if (left !== '...')
         {
@@ -65,14 +72,14 @@ class Test
         this.expected = expected;
     }
 
-    display_result(m, level=0)
+    display_result(m, level=0, nb=0)
     {
-        console.log("    ".repeat(level) + m.toString());
+        console.log("    ".repeat(level) + (nb + 1).toString().padStart(2, 0) + ' ' + m.toString());
         if (m instanceof MatchSet)
         {
             for (let i=0; i < m.getNbElementMatched(); i++)
             {
-                this.display_result(m.get(i), level + 1);
+                this.display_result(m.get(i), level + 1, i);
             }
         }
     }
@@ -118,6 +125,7 @@ class Test
                     console.log('Expected:', this.expected.toString());
                     console.log('Result  :', m.toString(), "\n");
                     bad += 1;
+                    console.timeEnd("Elapsed");
                     process.exit() // return -1
                 }
             }
@@ -238,7 +246,19 @@ var tests = {
     // Choice
     1100: new Test("a|b", "b", new ExpectedResult('b', '', true, 1)),
     1101: new Test("ab|cd", "cd", new ExpectedResult('cd', '', true, 2)),
-    1102: new Test("(a|d)c", "ac", new ExpectedResult('ac', '', true, 2))
+    1102: new Test("(a|d)c", "ac", new ExpectedResult('ac', '', true, 2)),
+    1103: new Test("(a|0)*c", "a00ac", new ExpectedResult('a00ac', '', true, 5)),
+
+    // Ash
+    2000: new Test('"[^"\\\\]*"', '"bonjour"', new ExpectedResult('"bonjour"', '', true, 9)),
+    2001: new Test('"([^"\\\\])*"', '"bonjour"', new ExpectedResult('"bonjour"', '', true, 9)),
+    2002: new Test('"([^"\\\\])*"', '"Hello,\nworld!"', new ExpectedResult('"Hello,\nworld!"', '', true, 15)),
+    2003: new Test('"([^"\\\\]|\\")*"', '"N\\"Gawah"', new ExpectedResult('"N\\"Gawah"', '', true, 10)),
+
+    // Edge cases
+    3001: new Test('a*a', 'a', new ExpectedResult('a', '', true, 1)),
+    3002: new Test('a*a', 'aa', new ExpectedResult('aa', '', true, 2)),
+    3003: new Test('a*a', 'aaa', new ExpectedResult('aaa', '', true, 3)),
 }
 
 let to_execute = Object.keys(tests);
@@ -256,3 +276,5 @@ console.log("Good    :", good);
 console.log("Neutral :", neutral);
 console.log("Bad     :", bad);
 console.log("Total   :", good + neutral + bad);
+
+console.timeEnd("Elapsed");
