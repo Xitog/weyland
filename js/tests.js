@@ -1,4 +1,4 @@
-import {Regex, Match, MatchSet} from "./weyland.mjs";
+import {Regex, Match, MatchSet, w} from "./weyland.mjs";
 
 console.time("Elapsed");
 
@@ -48,7 +48,7 @@ class ExpectedResult
     {
         if (this.length !== null)
         {
-            return "ExpectedResult {" + this.text.substring(0, this.length) + "||" + this.left +
+            return "ExpectedResult {" + w(this.text.substring(0, this.length)) + "||" + this.left +
                " (" + this.length + ") res=" + this.match + " part=" + this.partial + "}";
         }
         else
@@ -254,6 +254,7 @@ var tests = {
     2001: new Test('"([^"\\\\])*"', '"bonjour"', new ExpectedResult('"bonjour"', '', true, 9)),
     2002: new Test('"([^"\\\\])*"', '"Hello,\nworld!"', new ExpectedResult('"Hello,\nworld!"', '', true, 15)),
     2003: new Test('"([^"\\\\]|\\")*"', '"N\\"Gawah"', new ExpectedResult('"N\\"Gawah"', '', true, 10)),
+    2004: new Test('"([^"\\\\]|\\\\[nt"])*"', '"N\\"Gawah\n"', new ExpectedResult('"N\\"Gawah\n"', '', true, 11)),
 
     // Edge cases
     3001: new Test('a*a', 'a', new ExpectedResult('a', '', true, 1)),

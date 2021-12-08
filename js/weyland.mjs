@@ -1318,4 +1318,4 @@ class MatchSet extends Match
 
 // On abandonne le concept de Overload (ce qui reste après le match)
 
-export {Regex, Group, Class, Special, Match, MatchSet};
+export {Regex, Group, Class, Special, Match, MatchSet, w};
