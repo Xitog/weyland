@@ -39,17 +39,12 @@ class Char
         this.escaped = escaped;
     }
 
-    in(elements)
-    {
-        return (elements.includes(this.value) && !this.escaped);
-    }
-
     is(element)
     {
         return (element === this.value && !this.escaped);
     }
 
-    is_escaped(element)
+    isEscaped(element)
     {
         return (element === this.value && this.escaped);
     }
@@ -64,7 +59,7 @@ class Char
 
     toString()
     {
-        return 'Char |' + this.value + '| esc? ' + this.escaped;
+        return 'Char |' + this.toRepr() + '| esc? ' + this.escaped;
     }
 }
 
@@ -787,19 +782,19 @@ class Regex
             throw "Target must not be null in order to add the special to it.";
         }
         let res = true;
-        if (current.is(Special.Digit) || current.is_escaped(Special.DigitEscaped))
+        if (current.is(Special.Digit) || current.isEscaped(Special.DigitEscaped))
         {
             target.push(new Special(Special.Digit));
         }
-        else if (current.is(Special.Alpha) || current.is_escaped(Special.AlphaEscaped))
+        else if (current.is(Special.Alpha) || current.isEscaped(Special.AlphaEscaped))
         {
             target.push(new Special(Special.Alpha));
         }
-        else if (current.is(Special.Space) || current.is_escaped(Special.SpaceEscaped))
+        else if (current.is(Special.Space) || current.isEscaped(Special.SpaceEscaped))
         {
             target.push(new Special(Special.Space));
         }
-        else if (current.is(Special.AlphaNum) || current.is_escaped(Special.AlphaNumEscaped))
+        else if (current.is(Special.AlphaNum) || current.isEscaped(Special.AlphaNumEscaped))
         {
             target.push(new Special(Special.AlphaNum));
         }
