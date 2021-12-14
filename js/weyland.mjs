@@ -19,7 +19,7 @@ function d(level, s)
 
 function w(s)
 {
-    return s.replace('\n', '<NL>').replace(' ', '<WS>');
+    return s.replace('\n', Element.NewLineCode).replace(' ', Element.WhiteSpaceCode);
 }
 
 //-----------------------------------------------------------------------------
@@ -198,6 +198,7 @@ Element.Possessive = 3;
 Element.Escape = '\\';
 // For clean display
 Element.NewLineCode = "<NL>";
+Element.WhiteSpaceCode = "<WS>";
 
 //-----------------------------------------------------------------------------
 // La classe Special
