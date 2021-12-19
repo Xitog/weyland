@@ -162,7 +162,7 @@ class Element
         return this.max;
     }
 
-    match(candidate , start=0, level=0, debug=false)
+    match(candidate, start=0, level=0, debug=false)
     {
         let matched = 0;
         for (let i = start; i < candidate.length && matched < this.max; i++)
@@ -180,7 +180,7 @@ class Element
                 d(level, 'Element#match: ' + candidate[i] + " vs " + this + " matched=" + matched + " @" + i);
             }
         }
-        let res = (matched >= this.min) ? true : false;
+        let res = (matched >= this.min);
         return new Match(this, candidate, res, start, matched);
     }
 

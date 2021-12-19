@@ -10,20 +10,20 @@ class Char:
         self.value = value
         self.escaped = escaped
 
-    def isA(self, element):
+    def is_a(self, element):
         return element == self.value and not self.escaped
 
-    def isEscaped(self, element):
+    def is_escaped(self, element):
         return element == self.value and self.escaped
 
-    def toRepr(self):
+    def __repr__(self):
         s = "\\" if self.escaped else ""
         v = "<NL>" if self.value == "\n" else self.value
         s += v
         return s
 
     def __str__(self):
-        return 'Char | ' + self.toRepr() + '| esc? ' + str(self.escaped)
+        return 'Char | ' + repr(self) + '| esc? ' + str(self.escaped)
 
 
 class Element:
@@ -75,8 +75,47 @@ class Element:
 
     def __str__(self):
         card = self.card_to_string()
-        return 'xxx'
+        return self.__class__.__name__ + " " + self.get_pattern() + card
+
+    def info(self, level=0, prefix=''):
+        return '    ' * level + prefix + str(self)
+
+    def is_optionnal(self):
+        return self.min == 0
+
+    def is_repeatable(self):
+        return self.max > 1
+
+    def set_card(self, pmin, pmax):
+        if pmin > pmax:
+            raise Exception("Max cardinality must be superior or equal to min cardinality")
+        self.min = pmin
+        self.max = pmax
+
+    def get_min(self):
+        return self.min
+
+    def get_max(self):
+        return self.max
+
+    def match(self, candidate, start=0, level=0, debug=False):
+        matched = 0
+        i = start
+        while i < len(candidate) and matched < self.max:
+            if candidate[i] == self.value:
+                matched += 1
+            else:
+                break
+            if debug:
+                d(level, 'Element#match: ' + candidate[i] + " vs " + str(self) + " matched=" + matched + " @" + i)
+            i+=1
+        res = (matched >= self.min)
+        return Match(self, candidate, res, start, matched)
+
+
+class Special(Element):
+    pass
 
 c = Char('\n', True)
 print(c)
-print(c.toRepr())
+print(repr(c))
