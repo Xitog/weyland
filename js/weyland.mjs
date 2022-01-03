@@ -1001,7 +1001,7 @@ class Regex
         }
     }
 
-    match(text, debug)
+    match(text, debug=false)
     {
         return this.root.match(text, 0, 0, debug);
     }
