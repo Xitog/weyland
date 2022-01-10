@@ -1,4 +1,6 @@
 import {Regex, Match, MatchSet, w} from "./weyland.mjs";
+import {Lexer} from "./lexer.mjs";
+import {Language, INTEGER, IDENTIFIER, LANGUAGES} from "./languages.mjs";
 
 console.time("Elapsed");
 
@@ -279,3 +281,16 @@ console.log("Bad     :", bad);
 console.log("Total   :", good + neutral + bad);
 
 console.timeEnd("Elapsed");
+
+let lang = new Language("Pipo", {'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +'});
+console.log("Taille du langage :", lang.size());
+console.log("Définition du langage :");
+let lex = new Lexer(lang, null, true); // LANGUAGES['lua']
+console.log("Test langage 1");
+let tokens = lex.lex("Bonjour 5");
+console.log("--------------------------------------");
+console.log("tokens.length = ", tokens.length);
+for (const tok of tokens)
+{
+    console.log(tok);
+}

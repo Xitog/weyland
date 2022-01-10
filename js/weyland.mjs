@@ -759,7 +759,7 @@ class Regex
         }
         if (temp[0].is(Element.ZeroOrMore) || temp[0].is(Element.ZeroOrOne) || temp[0].is(Element.OneOrMore))
         {
-            throw "A regex cannot start with a quantifier.";
+            throw new Error(`A regex cannot start with a quantifier : |${this.raw}|.`);
         }
         if (temp[0].is(Choice.Alternative))
         {
@@ -1099,6 +1099,11 @@ class Match
     isMatch()
     {
         return this.match;
+    }
+
+    isOverload()
+    {
+        return this.text > this.length;
     }
 
     reduce(length=null, level=0, debug)
