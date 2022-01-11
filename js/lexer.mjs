@@ -15,7 +15,11 @@ class TokenDef
     constructor(typ, pattern, debug=false)
     {
         this.typ = typ;
-        this.regex = new Regex(pattern, debug);
+        this.regex = new Regex(pattern);
+        if (this.regex === null || this.regex.root === null)
+        {
+            throw new Error(`Error during regex compilation for |${pattern}|`);
+        }
     }
 
     toString()
@@ -177,13 +181,13 @@ class Lexer
         }
         raws = raws === null ? [] : raws;
         let output = '';
-        for (tok of tokens)
+        for (const tok of tokens)
         {
             if (raws.includes(tok.typ))
             {
                 output += tok.val
             } else {
-                output += `<span class="${this.lang}-${this.typ}">${encodeURI(tok.val)}</span>`;
+                output += `<span class="${this.lang}-${tok.typ}">${encodeURI(tok.val)}</span>`;
             }
         }
         return output;
@@ -198,10 +202,10 @@ class Lexer
         if (count === 0)
         {
             throw new Error(`\nLang:[${this.lang.name}]\nSource:\n|${text}|\nError:\nNo matching token for |${text.substring(start, index + 1)}| from |${text}| in:\n${this.defs}`)
-        } else if (count === 1) {
+        } /*else if (count === 1) {*/
             i = matches[0];
             token = new Token(this.defs[i].typ, res[i].getMatched(), start);
-        } else if (count > 1) { // We try to get the longest match (greedy regex)
+        /*} else if (count > 1) { // We try to get the longest match (greedy regex)
             let max_length = null;
             let good = {};
             for (const [i, r] in res.keys())
@@ -241,10 +245,10 @@ class Lexer
                 chosen = good[max_length][0];
             }
             token = new Token(self.defs[chosen].typ, res[chosen].getMatched(), start);
-        }
+        }*/
         if (this.debug)
         {
-            console.log(`=>= Token ${token}`);
+            console.log(`new Token ${token}`);
         }
         return token;
     }
@@ -264,11 +268,11 @@ class Lexer
             // Get Regex matching the current word
             if (this.debug)
             {
-                console.log(`-- ${index.toString().padStart(5, 0)} ----------------------------`);
+                console.log(`-- ${index.toString().padStart(5, 0)} ---------------------------- |${text.substring(start, index + 1)}|`);
             }
             let nb_partial = 0;
             let nb_match = 0;
-            let debug_matched = [];
+            //let debug_matched = [];
             for (let idf = 0; idf < this.defs.length; idf++)
             {
                 let r = this.defs[idf].regex.match(text.substring(start, index + 1));
@@ -276,11 +280,11 @@ class Lexer
                 {
                     nb_partial += 1;
                 }
-                console.log("WTF", idf, " <> ", r.isOverload());
+                //console.log("    Info", this.defs[idf].typ, r.match, " <> over?", r.isOverload());
                 if (r.match && !r.isOverload()) // il n'y a pas de texte laissé en dehors du match
                 {
                     nb_match += 1;
-                    debug_matched.push(this.defs[idf].typ + " : " + this.defs[idf].regex.toString());
+                    //debug_matched.push(this.defs[idf].typ + " : " + this.defs[idf].regex.toString());
                 }
                 if (res[idf] === undefined || res[idf].partial)
                 {
@@ -290,26 +294,26 @@ class Lexer
                 }
                 if (this.debug && (res[idf].partial || res[idf].match))
                 {
-                    console.log(`${idf.toString().padStart(5, 0)} ${this.defs[idf].toString().padStart(10)} ${this.defs[idf].regex.toString().padStart(20)} ${res[idf].toString().padStart(20)}`);
+                    console.log(`    Matching ${idf.toString().padStart(5, 0)} ${this.defs[idf].toString().padStart(10)} ${this.defs[idf].regex.toString().padStart(20)} ${res[idf].toString().padStart(20)}`);
                 }
             }
             if (this.debug)
             {
-                console.log('index', index, 'start', start, 'nb_tok', tokens.length, 'nb_part', nb_partial, 'nb_match', nb_match,
+                console.log('    => index', index, 'start', start, 'nb_tok', tokens.length, 'nb_part', nb_partial, 'nb_match', nb_match,
                             'char', text[index], `word |${text.substring(start, index+1)}|`);
-                if (nb_match > 0)
+                /*if (nb_match > 0)
                 {
                     for (let rs of debug_matched)
                     {
                         console.log('   - ' + rs);
                     }
-                }
+                }*/
             }
             // We got too far: deciding the correct matching regex
             if (nb_partial === 0 && nb_match === 0)
             {
                 let tok = this.make_token(start, text, index, res);
-                if (!self.discards.includes(tok.typ))
+                if (!this.discards.includes(tok.typ))
                 {
                     tokens.push(tok);
                 }

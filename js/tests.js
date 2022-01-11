@@ -282,15 +282,34 @@ console.log("Total   :", good + neutral + bad);
 
 console.timeEnd("Elapsed");
 
-let lang = new Language("Pipo", {'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +'});
-console.log("Taille du langage :", lang.size());
-console.log("Définition du langage :");
-let lex = new Lexer(lang, null, true); // LANGUAGES['lua']
-console.log("Test langage 1");
-let tokens = lex.lex("Bonjour 5");
-console.log("--------------------------------------");
-console.log("tokens.length = ", tokens.length);
-for (const tok of tokens)
+var nb_test_lang = 0;
+function testLang(lang, text, debug=false, html=false)
 {
-    console.log(tok);
+    nb_test_lang += 1;
+    let lex = new Lexer(lang, null, debug); // LANGUAGES['lua']
+    console.log('-----------------------------------------------------------------------------');
+    console.log(`Test langage ${nb_test_lang}`);
+    console.log('-----------------------------------------------------------------------------');
+    let tokens = lex.lex(text);
+    console.log("--------------------------------------");
+    console.log("tokens.length = ", tokens.length);
+    for (const tok of tokens)
+    {
+        console.log(tok);
+    }
+    if (html)
+    {
+        let s = lex.to_html(null, tokens, ['spaces'])
+        console.log("HTML:", s);
+    }
+    console.log("");
 }
+
+console.log("\n==================================================================================\n");
+
+let lang = new Language("Pipo", {'keywords': ['if'], 'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +', 'operator': '=='});
+console.log("Taille du langage :", lang.size());
+console.log("");
+
+testLang(lang, "Bonjour 5", true);
+testLang(lang, "if a == 5", false, true);

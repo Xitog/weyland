@@ -264,7 +264,7 @@ class Special extends Element
         //{
         //    matched = 0;
         //}
-        return new Match(this, candidate, res, start, matched);;
+        return new Match(this, candidate, res, start, matched);
     }
 }
 // Classes
@@ -1069,6 +1069,10 @@ class Match
         this.length = length;   // Length of candidate text matched
         this.match = match;     // Matched or not?
         this.partial = partial; // In case of not matching, is it due to not enough chars?
+        if (this.length === null && (this.match || this.partial))
+        {
+            throw new Error("A match or partial result cannot have a length of null.");
+        }
         //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
     }
 
@@ -1103,7 +1107,15 @@ class Match
 
     isOverload()
     {
-        return this.text > this.length;
+        let res = undefined;
+        if (!this.match && !this.partial)
+        {
+            res = false;
+        } else {
+            res = this.text.length > this.size();
+        }
+        //console.log(`        isOverload() |${this.text}| #${this.text.length} match=${this.match} #${this.size()} overload=${res}`);
+        return res;
     }
 
     reduce(length=null, level=0, debug)
@@ -1126,7 +1138,6 @@ class Match
             }
         }
     }
-
 
     // Pas de surchage de length en JavaScript
     size()
