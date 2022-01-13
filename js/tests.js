@@ -307,9 +307,10 @@ function testLang(lang, text, debug=false, html=false)
 
 console.log("\n==================================================================================\n");
 
-let lang = new Language("Pipo", {'keywords': ['if'], 'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +', 'operator': '=='});
+let lang = new Language("Pipo", {'keywords': ['if'], 'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +', 'operator': ['==', '\\+']});
 console.log("Taille du langage :", lang.size());
 console.log("");
 
 testLang(lang, "Bonjour 5", true);
 testLang(lang, "if a == 5", false, true);
+testLang(lang, "2 + 3", false, true);

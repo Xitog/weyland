@@ -187,7 +187,7 @@ class Lexer
             {
                 output += tok.val
             } else {
-                output += `<span class="${this.lang}-${tok.typ}">${encodeURI(tok.val)}</span>`;
+                output += `<span class="${this.lang}-${tok.typ}">${encodeURI(tok.val).replace(/%20/g, " ")}</span>`;
             }
         }
         return output;
