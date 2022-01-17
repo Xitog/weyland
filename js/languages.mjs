@@ -68,6 +68,7 @@ var INTEGER_BIN  = ['0[bB][01]+'];
 var FLOAT        = ['#+\\.#+', '#+[eE]-?#+', '#+\\.#+[eE]-?#+'];
 var STRING       = ['"[^"]*"', "'[^']*'"]; // pb : can't escape \" and \'
 var BLANKS       = ['[\t ]+'];
+var NEWLINES     = ['\n', '\r\n', '\n\r'];
 
 // Languages
 //   text
@@ -225,6 +226,7 @@ var LANGUAGES = {
             'keyword': ['and', 'break', 'do', 'else', 'elseif', 'end', 'for',
                         'function', 'goto', 'if', 'in', 'local', 'not', 'or',
                         'repeat', 'return', 'then', 'until', 'while'],
+            'special': ['ipairs', 'pairs', '\\?', 'print'], // ? is here for demonstration only */
             'identifier' : IDENTIFIER,
             'number' : ['#+', '#+\.#+'],
             'boolean': ['true', 'false'],
@@ -232,12 +234,11 @@ var LANGUAGES = {
             'nil' : ['nil'],
             'operator': ['=', '==', '~=', '\\+', '\\*', '-', '/', '%', '\\^',
                          '<', '<=', '>', '>=', '\\.\\.', '\\#', ':'],
-            'separator': ['{', '}', '(', ')', '\\[', ']', ',', ';'],
+            'separator': ['{', '}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
             'line_comment': ['--.*\n', '--.*$'],
-            'newline' : ['\n'],
-            'blank': [' +'],
+            'newline' : NEWLINES,
+            'blank': BLANKS,
             'wrong_int' : WRONG_INT,
-            'special': ['ipairs', 'pairs', '\\?', 'print'], // ? is here for demonstration only
         },
         // Special
         {

@@ -22,6 +22,14 @@ function w(s)
     return s.replace('\n', Element.NewLineCode).replace(' ', Element.WhiteSpaceCode);
 }
 
+function assert(condition, message)
+{
+    if (!condition)
+    {
+        throw new Error(`Assertion failed: ${message}`);
+    }
+}
+
 //-----------------------------------------------------------------------------
 // La classe Char
 //-----------------------------------------------------------------------------
@@ -71,7 +79,7 @@ class Element
 {
     constructor(value, parent=null)
     {
-        this.value = value;
+        this.raw = value;
         this.parent = parent;
         this.min = 1;
         this.max = 1;
@@ -105,17 +113,9 @@ class Element
         {
             let max = (this.max === -1) ? "*" : this.max;
             card = " {" + this.min + ", " + max + "}";
-            switch (this.quantifier)
+            if (this.quantifier !== Element.Normal)
             {
-                case Element.Greedy:
-                    card += ' greedy';
-                    break;
-                case Element.Lazy:
-                    card += ' lazy';
-                    break;
-                case Element.Possessive:
-                    card += ' possessive';
-                    break;
+                card += ' ' + this.quantifier;
             }
         }
         return card;
@@ -167,7 +167,7 @@ class Element
         let matched = 0;
         for (let i = start; i < candidate.length && matched < this.max; i++)
         {
-            if (candidate[i] === this.value)
+            if (candidate[i] === this.raw)
             {
                 matched += 1;
             }
@@ -177,7 +177,12 @@ class Element
             }
             if (debug)
             {
-                d(level, 'Element#match: ' + candidate[i] + " vs " + this + " matched=" + matched + " @" + i);
+                d(level, `Element#match: ${candidate[i]} vs ${this} nb matched=${matched} @${i}`);
+            }
+            // A lazy Element should match as least as possible
+            if (this.getQuantifier() === Element.Lazy && matched === this.getMin())
+            {
+                break;
             }
         }
         let res = (matched >= this.min);
@@ -190,10 +195,10 @@ class Element
 Element.ZeroOrOne = '?'; // Can be lazy too
 Element.OneOrMore = '+';
 Element.ZeroOrMore = '*';
-Element.Normal = 0;
-Element.Greedy = 1;
-Element.Lazy = 2;
-Element.Possessive = 3;
+Element.Normal = '';
+Element.Greedy = 'greedy';
+Element.Lazy = 'lazy';
+Element.Possessive = 'possessive';
 // Others
 Element.Escape = '\\';
 // For clean display
@@ -247,10 +252,15 @@ class Special extends Element
                 matched += 1;
                 if (debug)
                 {
-                    d(level, 'Special#match: ' + candidate[i] + " vs " + this + " matched= " + matched + " / " + this.max);
+                    d(level, 'Special#match: ' + candidate[i] + " vs " + this + " nb matched= " + matched + " / " + this.max);
                 }
             }
             else
+            {
+                break;
+            }
+            // A lazy Element should match as least as possible
+            if (this.getQuantifier() === Element.Lazy && matched === this.getMin())
             {
                 break;
             }
@@ -388,21 +398,33 @@ class Class extends Element
         {
             d(level, 'Class#match: START cand[' + start + ',]=|' + w(candidate.substring(start)) + "| vs class=[" + this.value + "]");
         }
-        let matched = new MatchSet(this, candidate, false, start);
+        let matched = new MatchSet(this, candidate, false, start); // element, text, match, start, length, partial
         for (let i = start; i < candidate.length && matched.raw_size() < this.max; i++)
         {
+            let has_matched = false;
             for (let elem of this.elements)
             {
                 let res = elem.match(candidate, i, level + 1, debug);
                 if (debug)
                 {
-                    d(level + 1, '---> ' + res.toString() + ' = |' + w(res.getMatched(candidate)) + '|');
+                    d(level + 1, `---> elem: ${elem} res: ${res.match} str: ${res.toString()} = |${w(res.getMatched(candidate))}|`);
                 }
                 if (res.isMatch())
                 {
+                    has_matched = true;
                     matched.push(res);
                     break;
                 }
+            }
+            // We must check if it has matched at least once, without we can't proceed to the next char in candidate string
+            if (!has_matched)
+            {
+                break;
+            }
+            // A lazy Element should match as least as possible
+            if (this.getQuantifier() === Element.Lazy && matched.length === this.getMin())
+            {
+                break;
             }
         }
         // MatchSet#size return null if there is no match (=dangerous!)
@@ -499,10 +521,11 @@ class Group extends Element
                 d(level + 1, 'group ic=' + index_candidate + ' ir=' + index_regex + ' ' +
                             w(candidate.substring(index_candidate)) + ' vs '+ elem.toString());
             }
+            // Lazy est déjà géré par les matchs, sinon c'est possessive
             let res = elem.match(candidate, index_candidate, level + 2, debug);
             if (!res.isMatch())
             {
-
+                // Optionalité
                 if (elem.getMin() === 0  && index_regex + 1 < this.elements.length)
                 {
                     if (debug)
@@ -512,6 +535,25 @@ class Group extends Element
                     index_regex += 1;
                     continue;
                 }
+                // Greedyness
+                else if (matched.size() >= 1
+                         // We are greedy
+                         && matched[matched.length-1].getElement().getQuantifier() === Element.Greedy
+                         // We have room to reduce
+                         && matched[matched.length-1].getElement().getMin() < matched[matched.length-1].size())
+                {
+                    // Backtracking
+                    let last_res = matched[matched.length - 1];
+                    let last = last_res.getElement();
+                    let index_candidate_start_next = index_candidate
+                    d(level + 2, 'backtracking before no result');
+                    while (last.getMin() < last_res.size() && !res.isMatch())
+                    {
+                        last_res.reduce(1, level + 1, debug);
+                        index_candidate_start_next -= 1;
+                        res = elem.match(candidate, index_candidate_start_next, level + 3, debug);
+                    }
+                }
                 else
                 {
                     if (debug)
@@ -519,52 +561,6 @@ class Group extends Element
                         d(level + 1, '---> no result, breaking');
                     }
                     break;
-                }
-            }
-            // Test next group element against the minimal next
-            if (elem.getMax() > 1 && elem.getQuantifier() != Element.Possessive && index_regex + 1 < this.elements.length)
-            {
-                let next = this.elements[index_regex + 1];
-                let index_candidate_start_next = index_candidate;
-                if (elem.getQuantifier() === Element.Lazy) // We want to match the least number of chars
-                {
-                    index_candidate_start_next += elem.getMin();
-                }
-                else // Element.Normal
-                {
-                    index_candidate_start_next += res.size();
-                }
-                if (debug)
-                {
-                    d(level + 2, '???? next ic=' + index_candidate_start_next + ' ir=' +
-                                (index_regex + 1) + ' ' + w(candidate.substring(index_candidate_start_next)) + ' vs ' +
-                                next.toString() + ' (' + (res.size() - elem.getMin()) + ' chars of freedom)');
-                }
-                let next_res = next.match(candidate, index_candidate_start_next, level + 3, debug);
-                if (next_res !== null)
-                {
-                    if (elem.getQuantifier() === Element.Lazy) // We want to match the least number of chars
-                    {
-                        res.reduce();
-                    }
-                    else if (elem.getQuantifier() === Element.Greedy)
-                    {
-                        if (index_candidate + res.size() === candidate.length && index_regex < this.elements.length - 1) // end of string but not end of regex
-                        {
-                            res.reduce(1, level + 1, debug); // 1 is Arbitrary
-                        }
-                    }
-                    if (debug)
-                    {
-                        d(level + 2, '---> ' + next_res.toString());
-                    }
-                }
-                else
-                {
-                    if (debug)
-                    {
-                        d(level + 2, '---> no result');
-                    }
                 }
             }
             matched.push(res);
@@ -586,6 +582,27 @@ class Group extends Element
             //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
             //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
             //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
+            // Not all regex elements has been taken, we are going to have a partial match => backtracking
+            console.log('a', index_candidate, candidate.length, index_regex, this.elements.length, matched.size());
+            if (index_candidate >= candidate.length
+                && index_regex < this.elements.length
+                && matched.size() >= 1
+                // We are greedy
+                && matched[matched.length-1].getElement().getQuantifier() === Element.Greedy
+                // We have room to reduce
+                && matched[matched.length-1].getElement().getMin() < matched[matched.length-1].size())
+            {
+                let last_res = matched[matched.length - 1];
+                let last = last_res.getElement();
+                let index_candidate_start_next = index_candidate
+                d(level + 2, 'backtracking before ending text');
+                while (last.getMin() < last_res.size() && !res.isMatch())
+                {
+                    last_res.reduce(1, level + 1, debug);
+                    index_candidate_start_next -= 1;
+                    res = elem.match(candidate, index_candidate_start_next, level + 3, debug);
+                }
+           }
         }
         if (debug)
         {
@@ -702,7 +719,10 @@ class Regex
 {
     constructor(pattern, autocompile=true)
     {
+
         this.raw = pattern;
+        assert(pattern !== null, "Pattern cannot be null.");
+        assert(typeof pattern === "string", `Pattern should be a string, instead it is: ${typeof pattern}.`);
         this.pattern = pattern.replace('\n', '\\n');
         this.root = null;
         if (autocompile)
@@ -714,6 +734,11 @@ class Regex
     toString()
     {
         return 'Regex |' + this.pattern + '|';
+    }
+
+    getPattern()
+    {
+        return this.pattern;
     }
 
     info()
@@ -1076,6 +1101,11 @@ class Match
         //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
     }
 
+    getElement()
+    {
+        return this.elementx;
+    }
+
     setElement(e)
     {
         this.elementx = e;
@@ -1246,16 +1276,17 @@ class MatchSet extends Match
 
     reduce(length=null, level=0, debug=false) // level & debug not used
     {
+        //console.log('xxx', this.last().constructor.name);
         if (length === null)
         {
-            this.last().length = this.last().element.getMin();
+            this.last().length = this.last().elementx.getMin();
         }
         else
         {
             this.last().length -= length;
-            if (this.last().length < this.last().element.getMin())
+            if (this.last().length < this.last().elementx.getMin())
             {
-                throw "Illogical match: can't be reduced lower than element min.";
+                throw new Error("Illogical match: can't be reduced lower than element min.");
             }
         }
     }
@@ -1276,6 +1307,7 @@ class MatchSet extends Match
         }
         return total;
     }
+
     // Pas de surchage de length en JavaScript
     size()
     {
@@ -1330,4 +1362,4 @@ class MatchSet extends Match
 
 // On abandonne le concept de Overload (ce qui reste après le match)
 
-export {Regex, Group, Class, Special, Match, MatchSet, w};
+export {Regex, Group, Class, Special, Match, MatchSet, w, assert};

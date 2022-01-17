@@ -1,6 +1,9 @@
 import {Regex, Match, MatchSet, w} from "./weyland.mjs";
 import {Lexer} from "./lexer.mjs";
-import {Language, INTEGER, IDENTIFIER, LANGUAGES} from "./languages.mjs";
+import {Language, INTEGER, IDENTIFIER, LANGUAGES, RECOGNIZED_LANGUAGES} from "./languages.mjs";
+
+const TEST_REGEX = false;
+const TEST_LEXER = true;
 
 console.time("Elapsed");
 
@@ -262,33 +265,39 @@ var tests = {
     3001: new Test('a*a', 'a', new ExpectedResult('a', '', true, 1)),
     3002: new Test('a*a', 'aa', new ExpectedResult('aa', '', true, 2)),
     3003: new Test('a*a', 'aaa', new ExpectedResult('aaa', '', true, 3)),
+
+    // Tests
+    4000: new Test('[\t ]+', ' ', new ExpectedResult(' ', '', true, 1)),
 }
 
 let to_execute = Object.keys(tests);
 //let to_execute = [156];
 
-//for (let [key, value] of Object.entries(tests))
-for (let key of to_execute)
+if (TEST_REGEX)
 {
-    let value = tests[key];
-    process.stdout.write('<' + key + '> ');
-    value.test(key);
+    //for (let [key, value] of Object.entries(tests))
+    for (let key of to_execute)
+    {
+        let value = tests[key];
+        process.stdout.write('<' + key + '> ');
+        value.test(key);
+    }
+
+    console.log("Good    :", good);
+    console.log("Neutral :", neutral);
+    console.log("Bad     :", bad);
+    console.log("Total   :", good + neutral + bad);
+
+    console.timeEnd("Elapsed");
 }
-
-console.log("Good    :", good);
-console.log("Neutral :", neutral);
-console.log("Bad     :", bad);
-console.log("Total   :", good + neutral + bad);
-
-console.timeEnd("Elapsed");
 
 var nb_test_lang = 0;
 function testLang(lang, text, debug=false, html=false)
 {
     nb_test_lang += 1;
-    let lex = new Lexer(lang, null, debug); // LANGUAGES['lua']
+    let lex = new Lexer(lang, null, debug);
     console.log('-----------------------------------------------------------------------------');
-    console.log(`Test langage ${nb_test_lang}`);
+    console.log(`${nb_test_lang.toString().padStart(3, 0)} Test langage ${lang.name} (${lang.size()} token def)`);
     console.log('-----------------------------------------------------------------------------');
     let tokens = lex.lex(text);
     console.log("--------------------------------------");
@@ -307,10 +316,32 @@ function testLang(lang, text, debug=false, html=false)
 
 console.log("\n==================================================================================\n");
 
-let lang = new Language("Pipo", {'keywords': ['if'], 'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +', 'operator': ['==', '\\+']});
-console.log("Taille du langage :", lang.size());
-console.log("");
+let rx =  new Regex('[@_]&*');
+let m = rx.match(' a', true);
+console.log(m.toString()); // matched aa !!!!!!!!!
+console.log(m);
 
-testLang(lang, "Bonjour 5", true);
-testLang(lang, "if a == 5", false, true);
-testLang(lang, "2 + 3", false, true);
+rx = new Regex('\n');
+m = rx.match('\n', true);
+console.log(m.toString());
+console.log(m);
+
+rx = new Regex("'.*'");
+m = rx.match("'hello'(", true);
+console.log(m.toString());
+console.log(m);
+exit();
+
+if (TEST_LEXER)
+{
+    let lang = new Language("Pipo", {'keywords': ['if'], 'int': INTEGER, 'id': IDENTIFIER, 'spaces': ' +', 'operator': ['==', '\\+']});
+    console.log("Taille du langage :", lang.size());
+    console.log("");
+
+    testLang(lang, "Bonjour 5", true);
+    testLang(lang, "if a == 5", true, true);
+    testLang(lang, "2 + 3", true, true);
+
+    let lua = LANGUAGES["lua"];
+    testLang(lua, "if a == 5 then\nprintln('hello')\nend", true);
+}
