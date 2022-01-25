@@ -76,7 +76,12 @@ class Language
                     let pattern = variants[index];
                     if (pattern[0] !== '^') { pattern = '^' + pattern;}
                     if (pattern[pattern.length-1] !== '$') { pattern += '$'}
-                    variants[index] = new RegExp(pattern);
+                    if (pattern.includes('[\\s\\S]'))
+                    {
+                        variants[index] = new RegExp(pattern, 'm');
+                    } else {
+                        variants[index] = new RegExp(pattern);
+                    }
                 }
             }
         }
@@ -170,10 +175,10 @@ class Lexer
         {
             for (let elem of variants)
             {
-                if (debug) console.log(word, 'vs', elem, '=', elem.test(word));
+                //if (debug) console.log(ln(word), 'vs', elem, '=', elem.test(word));
                 if (elem.test(word))
                 {
-                    if (debug) console.log('    ' + type + ' : ' + variants + ' => ' + elem.test(word));
+                    if (debug) console.log('    Match: ' + type + ' : ' + variants + ' => ' + elem.test(word));
                     matches.push([type, elem, start]);
                 }
             }
@@ -402,7 +407,7 @@ const LANGUAGES = {
             'wrong_int' : PATTERNS["WRONG_INTEGER"],
             'blank': PATTERNS["BLANKS"],
             'newline' : PATTERNS["NEWLINES"],
-            'line_comment': ['--[^\n]*(\n|$)'],
+            'comment': ['--[^\n]*(\n|$)'],
             'string' : PATTERNS["STRINGS"],
         },
         ['wrong_int'],
@@ -462,7 +467,7 @@ const LANGUAGES = {
             'wrong_int' : PATTERNS["WRONG_INTEGER"],
             'blank': PATTERNS["BLANKS"],
             'newline' : PATTERNS["NEWLINES"],
-            'line_comment': ['§§[^\n]*(\n|$)'],
+            'comment': ['§§.*(\n|$)'],
         },
         ['wrong_int'],
         // Special
@@ -483,7 +488,7 @@ const LANGUAGES = {
             'keyword': ['null'],
             'operator': [],
             'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ':', "\\."],
-            'line_comment' : [],
+            'comment' : [],
             'newline' : PATTERNS['NEWLINES'],
             'blank': PATTERNS['BLANKS'],
             'wrong_int' : PATTERNS['WRONG_INTEGER'],
@@ -497,7 +502,7 @@ const LANGUAGES = {
     // Un langage qui divise simplement en lignes
     'line': new Language('line',
         {
-            'line': ['.*\n', '.*$']
+            'line': ['.*(\n|$)']
         }
     ),
     'lua': new Language('lua',
@@ -506,15 +511,16 @@ const LANGUAGES = {
                         'function', 'goto', 'if', 'in', 'local', 'not', 'or',
                         'repeat', 'return', 'then', 'until', 'while'],
             'special': ['ipairs', 'pairs', '\\?', 'print'], // ? is here for demonstration only */
+            'boolean': ['true', 'false'],
+            'nil' : ['nil'],
             'identifier' : PATTERNS['IDENTIFIER'],
             'number' : ['\\d+', '\\d+\.\\d+'],
-            'boolean': ['true', 'false'],
             'string' : PATTERNS['STRINGS'],
-            'nil' : ['nil'],
             'operator': ['=', '==', '~=', '\\+', '\\*', '-', '/', '%', '\\^',
-                        '<', '<=', '>', '>=', '\\.\\.', '#', ':'],
+                        '<', '<=', '>', '>=', '\\.', '\\.\\.', '#', ':'],
             'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
-            'line_comment': ['--[^\n]*(\n|$)'],
+            'comment': ['--(?!\\[\\[).*(\n|$)', '--\\[\\[[\\s\\S]*--\\]\\](\n|$)'],
+            'intermediate_comment': ['--\\[\\[[\\s\\S]*'],
             'newline' : PATTERNS['NEWLINES'],
             'blank': PATTERNS['BLANKS'],
             'wrong_int' : PATTERNS['WRONG_INTEGER'],
@@ -542,7 +548,7 @@ const LANGUAGES = {
                       '&=', '/=', '<<=', '%=', '\\*=', '\\|=', '\\*\\*=', '>>=', '-=',
                       '/=', '\\^=', '\\.', '='],
             'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
-            'line_comment': ['#[^\n]*(\n|$)'],
+            'comment': ['#[^\n]*(\n|$)'],
             'newline' : PATTERNS["NEWLINES"],
             'blank': PATTERNS["BLANKS"],
             'wrong_int' : PATTERNS["WRONG_INTEGER"],
@@ -605,10 +611,17 @@ const TESTS = [
               'blank', 'keyword', 'blank', 'identifier', 'blank', 'operator', 'blank', 'integer', 'operator', 'newline',
               'blank', 'special', 'separator', 'string', 'separator']),
     new Test(LEXERS['ash'], "a ** 5", ['identifier', 'operator', 'integer']),
-    new Test(LEXERS['hamill'], "§§ ceci est un commentaire\n§§ ceci est un autre", ['line_comment', 'line_comment'])
+    new Test(LEXERS['hamill'], "§§ ceci est un commentaire\n§§ ceci est un autre", ['comment', 'comment']),
+    new Test(LEXERS['lua'], 't = { ["k1"] = 5, ["k2"] = "v", [4] = 6 } -- Définition\nprint(t["k1"]) -- Accès\nprint(t.k1) -- Accès avec sucre syntaxique',
+            ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator',
+             'separator', 'string', 'separator', 'operator', 'string', 'separator', 'separator', 'number', 'separator', 'operator', 'number',
+             'separator', 'comment', 'special', 'separator', 'identifier', 'separator', 'string', 'separator', 'separator', 'comment',
+             'special', 'separator', 'identifier', 'operator', 'identifier', 'separator', 'comment']),
+    new Test(LEXERS['lua'], '--[[Ceci est un\nz--]]', ['comment']),
+    new Test(LEXERS['lua'], '--[[Ceci est un\ncommentaire multiligne--]]', ['comment'])
 ]
 
-function tests()
+function tests(debug=false)
 {
     const text = "if a == 5 then\nprintln('hello')\nend\nendly = 5\na = 2.5\nb = 0xAE\nc = 2.5.to_i()\nd = 2.to_s()\n"; //5A";
     //const text = "if a == 5";
@@ -622,14 +635,12 @@ function tests()
 
     for (const [index, t] of TESTS.entries())
     {
-        t.test(index + 1, false);
+        t.test(index + 1, debug);
     }
 
     console.log(LEXERS['lua'].to_html("if a >= 5 then println('hello') end", null, ['blank']));
 }
 
-tests();
+tests(true);
 
-var RECOGNIZED_LANGUAGES = Object.keys(LANGUAGES);
-
-export {ln, Language, Token, Lexer, LANGUAGES, RECOGNIZED_LANGUAGES, PATTERNS, LEXERS};
+export {ln, Language, Token, Lexer, LANGUAGES, PATTERNS, LEXERS};
