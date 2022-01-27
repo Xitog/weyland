@@ -209,7 +209,7 @@ class Lexer
 
             if (matched.length === 0 && (old === null || old.length === 0))
             {
-                // Nothing, we try to add the maxixum
+                // Nothing, we try to add the maximum
                 //throw new Error("Impossible to map the language.");
             } else if (matched.length === 0) { // old !== null && old.length > 0
                 // Visions: trying to see if there is something after
@@ -528,8 +528,9 @@ const LANGUAGES = {
         ['wrong_integer'],
         {
             'ante_identifier': ['function'],
-        }),
-        'python': new Language('python',
+        }
+    ),
+    'python': new Language('python',
         {
             'keyword' : ['await', 'else', 'import', 'pass', 'break', 'except', 'in',
                      'raise', 'class', 'finally', 'is', 'return', 'and', 'for',
