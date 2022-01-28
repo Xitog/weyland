@@ -213,12 +213,15 @@ class Lexer
                 //throw new Error("Impossible to map the language.");
             } else if (matched.length === 0) { // old !== null && old.length > 0
                 // Visions: trying to see if there is something after
-                let future_index = i + 1;
-                let future_word = word + text[future_index];
-                matched = this.match(start, future_word, debug);
-                if (debug && matched.length > 0)
+                if (i + 1 < text.length)
                 {
-                    console.log('    vision of the future OK');
+                    let future_index = i + 1;
+                    let future_word = word + text[future_index];
+                    matched = this.match(start, future_word, debug);
+                    if (debug && matched.length > 0)
+                    {
+                        console.log('    vision of the future OK');
+                    }
                 }
                 // Si et seulement si dans le futur on n'aura rien on fait un jeton, sinon on continue
                 if (matched.length === 0)
@@ -343,7 +346,7 @@ class Test
                 throw new Error(`Error: expected ${r} and got ${tokens[index].getType()} in ${this.text}`);
             }
         }
-        console.log(`[SUCCESS] Test n°${num} Lang : ${this.lexer.getLanguage()} Text :\n${this.text}\nResult:`);
+        console.log(`[SUCCESS] Test n°${num} Lang : ${this.lexer.getLanguage()}\nText : |${ln(this.text)}|\nResult:`);
         for (const tok of tokens)
         {
             console.log(tok);
@@ -514,7 +517,7 @@ const LANGUAGES = {
             'boolean': ['true', 'false'],
             'nil' : ['nil'],
             'identifier' : PATTERNS['IDENTIFIER'],
-            'number' : ['\\d+', '\\d+\.\\d+'],
+            'number' : ['\\d+', '\\d+\\.\\d+'],
             'string' : PATTERNS['STRINGS'],
             'operator': ['=', '==', '~=', '\\+', '\\*', '-', '/', '%', '\\^',
                         '<', '<=', '>', '>=', '\\.', '\\.\\.', '#', ':'],
@@ -613,6 +616,9 @@ const TESTS = [
               'blank', 'special', 'separator', 'string', 'separator']),
     new Test(LEXERS['ash'], "a ** 5", ['identifier', 'operator', 'integer']),
     new Test(LEXERS['hamill'], "§§ ceci est un commentaire\n§§ ceci est un autre", ['comment', 'comment']),
+    new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),
+    new Test(LEXERS['lua'], 'a = 5', ['identifier', 'operator', 'number']),
+    new Test(LEXERS['lua'], 't = { ["k1"] = 5 }', ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator']),
     new Test(LEXERS['lua'], 't = { ["k1"] = 5, ["k2"] = "v", [4] = 6 } -- Définition\nprint(t["k1"]) -- Accès\nprint(t.k1) -- Accès avec sucre syntaxique',
             ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator',
              'separator', 'string', 'separator', 'operator', 'string', 'separator', 'separator', 'number', 'separator', 'operator', 'number',
@@ -621,6 +627,8 @@ const TESTS = [
     new Test(LEXERS['lua'], '--[[Ceci est un\nz--]]', ['comment']),
     new Test(LEXERS['lua'], '--[[Ceci est un\ncommentaire multiligne--]]', ['comment'])
 ]
+
+//const TESTS2 = [new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),]
 
 function tests(debug=false)
 {
