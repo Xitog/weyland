@@ -27,18 +27,62 @@
 """This file provides languages definition"""
 
 #-------------------------------------------------------------------------------
+# Import
+#-------------------------------------------------------------------------------
+
+import re
+
+#-------------------------------------------------------------------------------
 # Class
 #-------------------------------------------------------------------------------
 
 class Language:
-
-    def __init__(self, name, tokens, specials = None):
+    
+    def __init__(self, name, definitions, wrong=None, specials=None):
+        wrong = [] if wrong is None else wrong
+        specials = {} if specials is None else specials
         self.name = name
-        self.tokens = tokens
-        self.specials = specials if specials is not None else {}
+        if type(definitions) != dict:
+            raise Exception("Tokens should be an object of {type: [regex]} and it is a " + type(definitions))
+        self.definitions = definitions
+        for typ, variants in definitions.items():
+            if variants is None:
+                raise Exception(f"No variants for {typ} in language {name}")
+        # In order to match the entire string we put ^ and $ at the start of each regex
+        for variants in definitions.values():
+            for index, pattern in enumerate(variants):
+                if type(pattern) != re.Pattern:
+                    if pattern[0] != '^':
+                        pattern = '^' + pattern
+                    if pattern[-1] != '$':
+                        pattern += '$'
+                    if '[\\s\\S]' in pattern:
+                        variants[index] = re.compile(pattern, re.M)
+                    else:
+                        variants[index] = re.compile(pattern)
+        self.specials = specials
+        self.wrong = wrong
+
+    def is_wrong(self, typ):
+        return typ in self.wrong
+    
+    def get_name(self):
+        return self.name
+
+    def get_type_definitions(self):
+        return self.definitions.items()
+
+    def get_number_of_types(self):
+        return len(self.definitions)
+
+    def get_number_of_regex(self):
+        total = 0
+        for k, v in enumerate(self.definitions):
+            total += len(v)
+        return total
 
     def __str__(self):
-        return self.name
+        return f"Language {self.get_name()} with {self.get_number_of_types()} types and {self.get_number_of_regex()} regex"
 
 #-------------------------------------------------------------------------------
 # Globals and constants
@@ -61,204 +105,78 @@ STRING       = ['"[^"]*"', "'[^']*'"] # pb : can't escape \" and \'
 #   game
 #   ash, json, lua, python
 
+PATTERNS = {
+    'IDENTIFIER'    : ['[a-zA-Z]\\w*'],
+    'INTEGER'       : ['\\d+'],
+    'WRONG_INTEGER' : ['\\d+\\w+'],
+    'BLANKS'        : ['[ \\t]+'],
+    'NEWLINES'      : ['\n', '\n\r', '\r\n'],
+    'STRINGS'       : ["'([^\\\\]|\\\\['nt])*'", '"([^\\\\]|\\\\["nt])*"'],
+}
+
 LANGUAGES = {
-    # Un langage qui divise simplement en lignes
-    'line': Language('line', {
-            'line': ['.*\n', '.*$']
-        }
-    ),
-    'fr': Language('fr', {
-            'word': ['@+'],
-            'punct': [',', '\.', ':', ';', '-', '(', ')', '!', '\?'],
-            'blank': [' ', '\n', '\t']
-        }
-    ),
-    'text': Language('text', {
-            'normal': ['.*'],
-            'identifier': [],
-            'integer': [],
-            'boolean': [],
-            'nil': [],
-            'keyword': [],
-            'operator': [],
-            'separator': [],
-            'wrong_int': [],
-            'blank': [' +'],
-            'newline' : ['\n'],
-            'line_comment' : [],
-        },
-        # Special
+    'game': Language('game',
         {
-            'ante_identifier': [],
+            'number': ['\\d+'],
+            'normal': ['\\w[\\w\'-]*'], # Total Annihilation => 2 tokens, Baldur's => 1, Half-life => 1
+            'blank': PATTERNS['BLANKS'],
+            'wrong_int' : PATTERNS['WRONG_INTEGER'],
+            'newline' : ['\n'],
+            'operator': [':'] # FarCry:
         }
     ),
-    'bnf': Language('bnf', {
-            'keyword': ['<[@#_- ]+>'],  # non-terminal
-            'identifier': ['expansion', 'A', 'B', 'C', 'D', 'nom'], # expansion
-            'operator': ['::=', '|', '\.\.\.', '=', '-', '\?', '\*', '\+', '\@', '\$', '_'],
-            'separator': ['(', ')', '\[', ']', '{', '}', ',', ';'],
-            'string' : ['"[@#_- <>:=,;|\']*"', "'[@#_- <>:=,;|\"]*'"], # terminal
-            'blank': [' +'],
-            'comment': ['\#[@#_- "\'\\\#\@\$,;:=\.-\+\*\? ]*\n'],
-            'newline' : ['\n'],
-        },
+    'lua': Language('lua',
         {
-        }
-    ),
-    'bnf-mini': Language('bnf-mini', {
-            'keyword': ['<[@#_- ]+>'],   # non-terminal
-            'string' : ['".*"', "'.*'"], # terminal
-            'operator': ['::=', '|'],    # affect and choice
-            'blank': [' +'],
-            'newline' : ['\n'],
-            'comment': ['\#.*'],
-        },
-        {}
-    ),
-    'hamill' : Language('hamill', {
-            'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
-            'identifier' : IDENTIFIER,
-            'integer' : ['#+'],
-            'boolean' : ['true', 'false'],
-            'nil': [],
-            'operator': [':'],
-            'separator' : ['{', '}', '\#', '.'],
-            'wrong_int' : WRONG_INT,
-            'blank': [' +'],
-            'newline' : ['\n'],
-            'line_comment': ['§§'],
-        },
-        # Special
-        {
-            'ante_identifier': ['var', 'const'],
-            'accept_unknown': True,
-            'string_markers': [],
-            'number' : True
-        }
-    ),
-    'game': Language('game', {
-            'number': ['#+'],
-            'normal': ['[@_][@#\'-]*'], # Total Annihilation => 2 tokens, Baldur's => 1, Half-life => 1
-            'blank': [' +'],
-            'wrong_int' : WRONG_INT,
-            'newline' : ['\n'],
-            'operator': [':'] # FarCry: 
-        },
-        {
-        }
-    ),
-    'ash': Language('ash', {
-            'keyword' : ['if', 'then', 'elif', 'else', 'end',
-                 'while', 'do', 'for',
-                 'break', 'next', 'return',
-                 'var', 'fun', 'sub', 'get', 'set', 'class',
-                 'import', 'from', 'as',
-                 'try', 'catch', 'finally', 'raise', 'const'],
-            'identifier' : IDENTIFIER,
-            # Old
-            'affectation' : ['='],
-            'combined_affectation' : [r'\+=', '-=', r'\*=', '/=', '//=', r'\*\*=', '%='],
-            'type' : [':', '->'],
-            'fast' : ['=>'],
-            'label' : ['::'],
-            #'unary_operator' : ['-', 'not', r'\#', '~'],
-            # New
-            'integer' : [r'#+'] + INTEGER_BIN + INTEGER_HEXA,
-            'number' : FLOAT,
-            'boolean' : ['false', 'true'],
-            'nil': ['nil'],
-            #'binary_operator' : ['and', 'or', # boolean
-            'operator' : ['-', 'not', r'\#', '~', 'and', 'or', # boolean
-                  'in', # belongs to
-                  r'\+', '-', r'\*', '/', '//', r'\*\*', '%', # mathematical
-                  '\&', '|', '~', '>>', '<<', # bitwise
-                  '<', '<=', '>', '>=', '==', '!=', # comparison
-                  '\.'], # call
-            'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'wrong_int' : WRONG_INT,
-            'blank': [' +'],
-            'newline' : ['\n'],
-            'line_comment': ['--.*\n', '--.*$'],
-            'string' : STRING,
-        },
-        # Special
-        {
-            'ante_identifier': ['var', 'const', 'function', 'procedure', 'fun', 'pro', 'class', 'module'],
-        }
-    ),
-    'json': Language('json', {
-            'identifier' : IDENTIFIER,
-            'number' : ['#+', '#+\.#+'],
-            'boolean': ['true', 'false'],
-            'string' : ['".*"', "'.*'"],
-            'nil': [],
-            'keyword': ['null'],
-            'operator': [],
-            'separator': ['{', '}', '(', ')', r'\[', ']', ',', ':', "\."],
-            'line_comment' : [],
-            'newline' : ['\n'],
-            'blank': [' +'],
-            'wrong_int' : WRONG_INT,
-        },
-        # Special
-        {
-            'ante_identifier': [],
-        }
-    ),
-    'lua': Language('lua', {
-            #'keyword': ['and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for',
-            #            'function', 'goto', 'if', 'in', 'local', 'nil', 'not', 'or',
-            #            'repeat', 'return', 'then', 'true', 'until', 'while'],
             'keyword': ['and', 'break', 'do', 'else', 'elseif', 'end', 'for',
                         'function', 'goto', 'if', 'in', 'local', 'not', 'or',
                         'repeat', 'return', 'then', 'until', 'while'],
-            'identifier' : IDENTIFIER,
-            'number' : ['#+', '#+\.#+'],
+            'special': ['ipairs', 'pairs', '\\?', 'print'], # ? is here for demonstration only */
             'boolean': ['true', 'false'],
-            'string' : ['".*"', "'.*'"],
             'nil' : ['nil'],
-            'operator': ['=', '==', '~=', r'\+', r'\*', '-', '/', '%', '\^',
-                         '<', '<=', '>', '>=', r'\.\.', r'\#', ':'],
-            'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'line_comment': ['--.*\n', '--.*$'],
-            'newline' : ['\n'],
-            'blank': [' +'],
-            'wrong_int' : WRONG_INT,
-            'special': ['ipairs', 'pairs', '\?', 'print'], # ? is here for demonstration only
+            'identifier' : PATTERNS['IDENTIFIER'],
+            'number' : ['\\d+', '\\d+\\.\\d+'],
+            'string' : PATTERNS['STRINGS'],
+            'operator': ['==', '~=', '<', '<=', '>', '>=',
+                         '=',
+                         '\\+', '\\*', '-', '/', '%', '\\^',
+                         '&', '\\|', '~', '>>', '<<',
+                         '\\.', '\\.\\.',
+                         '#', ':'],
+            'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
+            'comment': ['--(?!\\[\\[).*(\n|$)', '--\\[\\[[\\s\\S]*--\\]\\](\n|$)'],
+            'intermediate_comment': ['--\\[\\[[\\s\\S]*'],
+            'newline' : PATTERNS['NEWLINES'],
+            'blank': PATTERNS['BLANKS'],
+            'wrong_int' : PATTERNS['WRONG_INTEGER'],
         },
-        # Special
+        ['wrong_integer'],
         {
             'ante_identifier': ['function'],
         }
     ),
-    'python': Language('python', {
+    'python': Language('python',
+        {
             'keyword' : ['await', 'else', 'import', 'pass', 'break', 'except', 'in',
                      'raise', 'class', 'finally', 'is', 'return', 'and', 'for',
                      'continue', 'lambda', 'try', 'as', 'def', 'from', 'while',
                      'nonlocal', 'assert', 'del', 'global', 'not', 'with', 'if',
                      'async', 'elif', 'or', 'yield'],
-            'identifier' : IDENTIFIER,
-            'integer' : INTEGER + INTEGER_HEXA + INTEGER_BIN,
-            'float' : FLOAT,
-            'boolean' : ['True', 'False'],
-            'string' : ['".*"', "'.*'"],
-            'nil': ['None'],
-            'operator': [r'\+', '/', '//', '\&', '\^', '~', '|', r'\*\*', '<<', '%', r'\*',
-                      '-', '>>', ':', '<', '<=', '==', '!=', '>=', '>', r'\+=',
-                      '\&=', '//=', '<<=', '%=', '\*=', '|=', r'\*\*=', '>>=', '-=',
-                      '/=', '\^=', '\.', '='],
-            'separator': ['{', '}', '(', ')', r'\[', ']', ',', ';'],
-            'line_comment': ['\#.*\n', '\#.*$'],
-            'newline' : ['\n'],
-            'blank': [' +'],
-            'wrong_int' : WRONG_INT,
-            'special': ['print'],
-        },
-        # Special
+            'operator': ['\\+', '/', '//', '&', '\\^', '~', '\\|', '\\*\\*', '<<', '%', '\\*',
+                      '-', '>>', ':', '<', '<=', '==', '!=', '>=', '>', '\\+=',
+                      '&=', '/=', '<<=', '%=', '\\*=', '\\|=', '\\*\\*=', '>>=', '-=',
+                      '/=', '\\^=', '\\.', '='],
+            'newline' : PATTERNS["NEWLINES"],
+            'blank': PATTERNS["BLANKS"],
+            'wrong_int' : PATTERNS["WRONG_INTEGER"],
+        }
+    ),
+    'text': Language('text',
         {
-            'ante_identifier': ['def', 'class'],
+            'normal': ['[^ \\t]*'],
+            'blank': PATTERNS['BLANKS'],
+            'newline': PATTERNS['NEWLINES'],
         }
     ),
 }
 
-RECOGNIZED_LANGUAGES = list(LANGUAGES.keys())
+RECOGNIZED_LANGUAGES = LANGUAGES.keys()

@@ -27,11 +27,11 @@
 """Weyland: provides an alternative way to write regular expression (regex) and a lexer using them."""
 
 # Version of the weyland package
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 # Imports
 import logging
-from weyland.regex import *
+#from weyland.regex import *
 from weyland.lexer import *
 from weyland.languages import RECOGNIZED_LANGUAGES, LANGUAGES, Language
 

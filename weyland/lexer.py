@@ -30,206 +30,202 @@
 # Imports
 #-------------------------------------------------------------------------------
 
-from weyland.regex import Regex
-from weyland.languages import Language # only for check
+from weyland.languages import Language, LANGUAGES
 import html
+import re
+
+#-------------------------------------------------------------------------------
+# Functions
+#-------------------------------------------------------------------------------
+
+def ln(s):
+    return s.replace('\n', '<NL>')
 
 #-------------------------------------------------------------------------------
 # Classes
 #-------------------------------------------------------------------------------
 
-class TokenDef:
-
-    def __init__(self, typ, pattern, debug=False):
-        self.typ = typ
-        self.regex = Regex(pattern, debug)
-
-    def __str__(self):
-        return f"TokenDef {self.typ}"
-
-    def __repr__(self):
-        return f"{self.typ} {self.regex}"
-
-
-class Token:
-
-    def __init__(self, typ, val, first):
-        self.typ = typ
-        self.val = val
-        self.first = first
-        self.length = len(val)
-        self.last = self.first + self.length - 1
-
-    def __str__(self):
-        return f"{self.typ} |{self.val}| ({self.first}, {self.last}) #{self.length}"
-
-    def __repr__(self):
-        return str(self)
-
-    def __len__(self):
-        return self.length
-
-    def __eq__(self, o):
-        return type(o) == Token and self.typ == o.typ and self.val == o.val and self.first == o.first
-
-
 class LexingException(Exception):
     pass
 
 
+class Token:
+    
+    def __init__(self, typ, value, start):
+        self.typ = typ
+        self.value = value
+        self.start = start
+
+    def get_type(self):
+        return self.typ
+
+    def get_value(self):
+        return self.value
+
+    def get_start(self):
+        return self.start
+
+    def __str__(self):
+        return f"Token {self.typ:20s}  |{(ln(self.value) + '|'):10s}  {len(self.value)} @{self.start}"
+
+
+class Mini:
+
+    def __init__(self, typ, elem, start):
+        self.typ = typ
+        self.elem = elem
+        self.start = start
+
+
 class Lexer:
 
-    REPLACE_NEWLINE = '\\n'
-
-    def __init__(self, lang, discards=None, debug=False):
-        assert(isinstance(lang, Language))
-        assert(discards is None or isinstance(discards, list))
-        assert(isinstance(debug, bool))
-        self.debug = debug
+    def __init__(self, lang, discards=[]):
         self.lang = lang
-        self.defs = []
-        self.discards = [] if discards is None else discards
-        for typ, values in lang.tokens.items():
-            for val in values:
-                self.defs.append(TokenDef(typ, val, self.debug))
-        if self.debug:
-            self.info()
+        self.discards = discards
 
-    def ignore(self, typ):
-        if isinstance(typ, str):
-            self.discards.append(typ)
-        elif isinstance(typ, list):
-            for t in typ:
-                self.ignore(t)
-        else:
-            raise Exception(f"Unknown type to ignore: {typ} of {type(typ)}")
+    def get_language(self):
+        return self.lang
 
-    def clear_ignored(self):
-        self.discards = []
+    def match(self, start, word, debug=False):
+        matches = []
+        for typ, variants in self.lang.get_type_definitions():
+            for elem in variants:
+                m = elem.fullmatch(word)
+                if m is not None:
+                    if debug:
+                        print(f"    Match: {typ} : {elem} => {m}")
+                    matches.append(Mini(typ, elem, start))
+        return matches
 
-    def info(self):
-        print('----------------------------------------')
-        print('Language')
-        print('----------------------------------------')
-        print('Types :', len(self.lang.tokens))
-        for d in self.lang.tokens:
-            print('   ', d)
-        print('----------------------------------------')
-        print('Token definitions :', len(self.defs))
-        for tokdef in self.defs:
-            print('   ', repr(tokdef))
-        print('----------------------------------------')
-
-    def check(self, string, typs, vals):
-        print(f'Text: {string}')
-        tokens = self.lex(string)
-        if len(tokens) != len(vals):
-            print(f'ERROR        Wrong length of tokens expected: {len(typs)}, got {len(tokens)}:')
-            for i, t in enumerate(tokens):
-                print(f'    {t.typ:10s} |{t.val:s}|')
-            return False
-        print(f'Tokens: {len(tokens)}')
-        for i, t in enumerate(tokens):
-            if t.typ == typs[i] and t.val == vals[i]:
-                val_inf = t.val.replace('\n', Lexer.REPLACE_NEWLINE)
-                print(f'OK  {i:5d}. {t.typ:10s} |{val_inf:s}|')
-            else:
-                val_err = t.val.replace('\n', Lexer.REPLACE_NEWLINE)
-                val_exp = vals[i].replace('\n', Lexer.REPLACE_NEWLINE)
-                print(f'ERROR   {i:5d}. {t.typ:10s} |{val_err:s}|')
-                print(f'EXPECTED {typs[i]:10s} |{vals[i]:s}|')
-                return False
-        return True
+    def lex(self, text, discards=None, debug=False):
+        discards = self.discards if discards is None else discards
+        word = ''
+        old = None
+        matched = []
+        tokens = []
+        start = 0
+        i = 0
+        while i < len(text):
+            word += text[i]
+            if debug:
+                print(f"{i}. @{start} |{ln(word)}|")
+            matched = self.match(start, word, debug)
+            if debug and len(matched) == 0:
+                print('    no match this turn')
+            if len(matched) == 0 and (old is None or len(old) == 0):
+                # Nothing, we try to add the maximum
+                pass
+            elif len(matched) == 0: # old is not None and old.length > 0
+                # Visions: trying to see if there is something after
+                if i + 1 < len(text):
+                    future_index = i + 1
+                    future_word = word + text[future_index]
+                    matched = self.match(start, future_word, debug)
+                    if debug and len(matched) > 0:
+                        print('    vision of the future OK')
+                # Si et seulement si dans le futur on n'aura rien on fait un jeton, sinon on continue
+                if len(matched) == 0:
+                    content = word[0:len(word)-1]
+                    if debug:
+                        print(f'pour le mot |{content}| nous avons :')
+                        for res in old:
+                            print(f"    {res.typ} : {res.elem} @{res.start}")
+                    if self.lang.is_wrong(old[0].typ):
+                       raise LexingException(f'A wrong token definition {old[0].typ} : {old[0].elem} has been validated by the lexer: {content}')
+                    if old[0].typ not in discards:
+                        tokens.append(Token(old[0].typ, content, old[0].start))
+                    word = ''
+                    i -= 1
+                    start = i
+            old = matched
+            matched =[]
+            i += 1
+        if len(old) > 0:
+            content = word
+            if debug:
+                print('pour le mot ' + content + ' nous avons :')
+                for res in old:
+                    print(f'    {res.typ} : {res.elem}')
+            if self.lang.is_wrong(old[0].typ):
+                raise LexingException(f'A wrong token definition {old[0].typ} : {old[0].elem} has been validated by the lexer: {content}')
+            if old[0].typ not in discards:
+                tokens.append(Token(old[0].typ, content, old[0].start))
+        elif len(word) > 0:
+            raise LexingException(f'Text not lexed at the end: |{word}| in |{ln(text)}|')
+        return tokens
 
     def to_html(self, text=None, tokens=None, raws=None):
-        if text is None and tokens is None:
-            raise LexingException("Nothing send to html")
-        elif text is not None and tokens is not None:
-            raise LexingException("Send to html text OR tokens, not both!")
-        if text is not None:
-            tokens = self.lex(text)
         raws = [] if raws is None else raws
+        if text is None and tokens is None:
+            raise LexingException("Nothing send to to_html")
+        elif text is not None and tokens is not None:
+            raise LexingException("Send to to_html text OR tokens, not both!")
+        if text is not None:
+            tokens = self.lex(text, [])
         output = ''
         for tok in tokens:
-            if tok.typ in raws:
-                output += tok.val
+            if tok.get_type() in raws:
+                output += tok.get_value()
             else:
-                output += f'<span class="{self.lang}-{tok.typ}">{html.escape(tok.val)}</span>'
+                val = tok.get_value()
+                val = val.replace('&', '&amp;')
+                val = val.replace('>', '&gt;')
+                val = val.replace('<', '&lt;')
+                output += f'<span class="{self.lang.get_name()}-{tok.get_type()}">{val}</span>'
         return output
 
-    def make_token(self, start, text, index, res):
-        matches = list(filter(lambda elem: res[elem].match if res[elem] is not None else False, range(len(res))))
-        count = len(matches)
-        if count == 0:
-            raise LexingException(f'\nLang:[{self.lang.name}]\nSource:\n|{text}|\nError:\nNo matching token for |{text[start:index + 1]}| from |{text}| in:\n{self.defs}')
-        elif count == 1:
-            i = matches[0]
-            token = Token(self.defs[i].typ, res[i].get_match(), start)
-        elif count > 1: # We try to get the longest match (greedy regex)
-            max_length = None
-            good = {}
-            for i, r in enumerate(res):
-                if r is None or not r.match:
-                    continue
-                length = len(r.get_match())
-                if length in good:
-                    good[length].append(i)
-                else:
-                    good[length] = [i]
-                if max_length is None or length > max_length:
-                    max_length = length
-            if len(good[max_length]) > 1:
-                # Last try: do we have a only one specific among them?
-                specific = list(filter(lambda elem: self.defs[elem].regex.is_specific(), good[max_length]))
-                if len(specific) == 1:
-                    chosen = specific[0]
-                else:
-                    print('ERROR: Multiple matching tokens')
-                    for i in good[max_length]:
-                        print('   ', self.defs[i], res[i], len(res[i].get_match()))
-                    raise LexingException(f'Multiple matching regex of same length: {good}')
-            else:
-                chosen = good[max_length][0]
-            token = Token(self.defs[chosen].typ, res[chosen].get_match(), start)
-        if self.debug:
-            print(f'=>= Token {token}')
-        return token
 
-    def lex(self, text):
-        if self.debug:
-            print(f'Texte = |{text}|')
-        index = 0
-        res = [ None ] * len(self.defs)
-        start = 0
-        tokens = []
-        while index < len(text):
-            # Get Regex matching the current word
-            if self.debug:
-                print(f'-- {index:5d} ----------------------------')
-            nb_partial = 0
-            nb_match = 0
-            for idf in range(len(self.defs)):
-                r = self.defs[idf].regex.match(text[start:index + 1])
-                if r.partial: nb_partial += 1
-                if r.match and not r.is_overload(): nb_match += 1
-                if res[idf] is None or res[idf].partial:
-                    res[idf] = r
-                elif res[idf] is not None and res[idf].match and r.match:
-                    res[idf] = r
-                if self.debug and (res[idf].partial or res[idf].match):
-                    print(f'{idf:5d} {self.defs[idf].typ:10s} {str(self.defs[idf].regex):20s} {str(res[idf]):20s}')
-            if self.debug:
-                print('index', index, 'start', start, 'nb_tok', len(tokens), 'nb_part', nb_partial, 'nb_match', nb_match, 'char', text[index], f'word |{text[start:index+1]}|')
-            # We got too far: deciding the correct matching regex
-            if nb_partial == 0 and nb_match == 0:
-                tok = self.make_token(start, text, index, res)
-                if tok.typ not in self.discards:
-                    tokens.append(tok)
-                start = tok.last + 1
-                index = tok.last
-                res = [ None ] * len(self.defs)
-            index += 1
-        tok = self.make_token(start, text, index, res)
-        if tok.typ not in self.discards:
-            tokens.append(tok)
-        return tokens
+class Test:
+
+    def __init__(self, lexer, text, result):
+        self.lexer = lexer
+        self.text = text
+        self.result = result
+        if self.result is None:
+            raise Exception(f"No expected results for test {text}")
+
+    def test(self, num=0, debug=False):
+        tokens = self.lexer.lex(self.text, None, debug)
+        if len(tokens) != len(self.result):
+            longuest = max(len(tokens), len(self.result))
+            print("index expected        type            valeur")
+            for index in range(longuest):
+                if index < len(tokens) and index < len(self.result):
+                    print(f"{index:5d} {self.result[index]:15s} {tokens[index].get_type():15s} {ln(tokens[index].get_value())}")
+                elif index < len(tokens):
+                    print(f"{index:5d} None            {tokens[index].get_type():15s} {ln(tokens[index].get_value())}")
+                elif index < len(self.result):
+                    print(index, self.result[index], 'None')
+            raise Exception(f"Error: expected {len(self.result)} tokens and got {len(tokens)}")
+        for index, r in enumerate(self.result):
+            if tokens[index].get_type() != r:
+                raise LexingException(f"Error: expected {r} and got {tokens[index].get_type()} in {self.text}")
+        print(f"[SUCCESS] Test n°{num} Lang : {self.lexer.get_language()}\nText : |{ln(self.text)}|\nResult:")
+        for tok in tokens:
+            print(f'   {tok}')
+
+#-------------------------------------------------------------------------------
+# Globals and constants
+#-------------------------------------------------------------------------------
+
+lex = Lexer(LANGUAGES['lua'], ['blank'])
+TESTS = [
+    Test(lex, '3+5', ['number', 'operator', 'number']),
+    Test(lex, 'a = 5', ['identifier', 'operator', 'number']),
+    Test(lex, 't = { ["k1"] = 5 }', ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator']),
+    Test(lex, 't = { ["k1"] = 5, ["k2"] = "v", [4] = 6 } -- Définition\nprint(t["k1"]) -- Accès\nprint(t.k1) -- Accès avec sucre syntaxique',
+            ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator',
+             'separator', 'string', 'separator', 'operator', 'string', 'separator', 'separator', 'number', 'separator', 'operator', 'number',
+             'separator', 'comment', 'special', 'separator', 'identifier', 'separator', 'string', 'separator', 'separator', 'comment',
+             'special', 'separator', 'identifier', 'operator', 'identifier', 'separator', 'comment']),
+    Test(lex, '--[[Ceci est un\nz--]]', ['comment']),
+    Test(lex, '--[[Ceci est un\ncommentaire multiligne--]]', ['comment'])
+]
+
+#TESTS = [Test(lex, '3+5', ['number', 'operator', 'number']),]
+
+def tests(debug=False):
+    for index, t in enumerate(TESTS):
+        t.test(index + 1, debug)
+
+#tests(True)
