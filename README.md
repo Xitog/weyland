@@ -1,72 +1,84 @@
 # Weyland
 
-Weyland provides an alternative way to write regular expression handling incomplete matching and lexers using them.
+Weyland provides a way to define computing languages and a generic lexer to lex/tokenize/perform lexical analysis on them.
 
 Install with: ``pip install weyland``
 
-## A. Syntax of regular expression
+## A. Languages
 
-Weyland offers three classes: **Regex** for regexes, **Match** for matches and **Element**.
+Weyland offers the class **Language** to define the languages.
 
-A *Regex* is composed of *Element*s.
+A language is initialized with:
 
-Below is a short definition of the language used to define Regex.
+* a **mandatory** dictionary { string : list } of token definitions, 
+* a **optional** list of unwanted definitions in the language,
+* a **optional** dictionary of tags to apply on tokens.
 
-### A.1 Sequence
+Token types are defined by a name and a list of matching patterns. A pattern is a standard Python regular expression.
 
-``ab`` a then b
+Weyland comes with a list of predefined patterns stored in the dictionary PATTERNS for standard definitions like string, integer and float.
 
-### A.2 Classes
+The unwanted definitions are a list of matched tokens which do not belong to the language. For example, 18A will be matched by the two tokens integer, identifier if we define only these two. By adding a token type wrong_integer corresponding to it, we will prevent this behavior but we must declare that is an error. We do that by putting wrong_integer in the list of unwanted definitions.
 
-A class is a group of characters represented by a single special character.
+The last dictionary is a dictionary of tags to apply on lists of token types. It can help for syntax coloration for example.
 
-* ``#`` or ``\d`` any digits (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-* ``@`` or ``\a`` any letters
-* ``&`` or ``\w`` any digits, letters and the underscore character (_)
-* ``.`` any characters which is not a new line
+Below is a short example:
 
-### A.3 Positions
+```
+LANGUAGES['ash'] = Language('ash',
+                            {
+                                'keyword'   : [ 'if', 'else', 'end', 'elif'],
+                                'boolean'   : ['true', 'false'],
+                                'nil'       : ['nil'],
+                                'identifier': PATTERNS['IDENTIFIER'],
+                                'number'    : ['\\d+', '\\d+\\.\\d+'],
+                                'string'    : PATTERNS['STRINGS'],
+                                'operator'  : ['\\+', '\\*', '-', '/', '%', '\\^'],
+                                'separator' : ['\\(', '\\)', ','],
+                                'comment'   : ['--(?!\\[\\[).*(\n|$)'],
+                                'newline'   : PATTERNS['NEWLINES'],
+                                'blank'     : PATTERNS['BLANKS'],
+                                'wrong_int' : PATTERNS['WRONG_INTEGER'],
+                            },
+                            ['wrong_integer'],
+                            {
+                                'ante_identifier': ['function'],
+                            }
+                        )
+```
 
-A position can be also represented by a single special character.
+Pattern with [\\\\s\\\\S] (anything including new line) are treated as multiline regex.
 
-* ``^`` start of the string (can be used only at the start of the Regex)
-* ``$`` end of the string (can be used only at the end of the Regex)
+## B. Lexer
 
-### A.4 Choices
+Weyland provides also a lexer class to perform lexical analysis on a text given a defined language.
 
-``[ab]`` a or b
+A lexer is initialized with a language definition (an instance of the class Language) and a list of tokens to discard when lexing.
 
-### A.5 Optionality and repetition
+The function lex transform a given text to a list of tokens.
 
-Optionality and repetition of a character, a class or a choice can be represented by a single special character.
+The algorithm is rather simple: 
 
-* ``a?b`` b or ab (a is optionnal, it can appear between 0 and 1 time),
-* ``a+b`` ab, aab, aaab, aaaab, etc. (a is mandatory, it must appear betweean 1 and X times),
-* ``a*b`` b, ab, aab, aaab, aaaab, etc. (a is optionnal, it can appear between 0 and X times).
+* A word is initialized to an empty string
+* The next char of the text is added to the word
+* It tries to match all regex against the current word.
+* If there is no match, it looks ahead of 1 char to try to do the matching
+* If there is still no match, it looks at the previous iteration
+  * If there is a token definition matching, it emits a token and empties the word
+    * If there is more than one token definition matching, **the first defined in the language will be choosen**
+  * If no, the lexing fails.
 
-Optionality and repetition can't be used for positions.
+The lexer can emit a html representation of the tokens: each tokens is emitted in a span of class *language name - token type* except raws tokens which are emitted as their value.
 
-### A.6 Escaping special characters
+The tokens are defined by:
 
-In order to use a special characters as a normal character in a regex, you must escape them by putting the (\) character before it.
-
-There are 12 escapable characters: #, @, &, ., ^, $, [, ], ?, +, *, \.
-
-### A.7 Limitations
-
-* In a choice, **you can only choose between one element** not between sequences,
-* In a choice, **no repeated element nor optionnal element**.
-* In a choice, **no start nor end of the string elements**.
-* You can only use terminals and special characters in regex definitions.
-* You can't define groups in regex definitions.
-
-## B. Lexers
-
-Weyland provides also several lexers using the incomplete matching feature of Weyland's regex.
+* A type
+* A value, the string which matches the pattern
+* A starting index in the text
 
 ### B.1 Languages available
 
-A set of lexers and associated tokens are available for the following languages: 
+A set of lexers and associated languages are available in the package: 
 
 * Data language: json,
 * Programming languages: ash, lua, python,
@@ -80,4 +92,3 @@ List of websites about Weyland:
 * Project on PyPI: https://pypi.org/project/weyland/
 * Documentation: see project description on Github or PyPI
 * Stats: https://libraries.io/pypi/weyland
-

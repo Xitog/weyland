@@ -115,6 +115,28 @@ PATTERNS = {
 }
 
 LANGUAGES = {
+    'ash': Language('ash',
+        {
+            'keyword'   : [ 'if', 'then', 'else', 'end', 'elif'],
+            'boolean'   : ['true', 'false'],
+            'nil'       : ['nil'],
+            'identifier': PATTERNS['IDENTIFIER'],
+            'number'    : ['\\d+', '\\d+\\.\\d+'],
+            'string'    : PATTERNS['STRINGS'],
+            'operator'  : ['\\+', '\\*', '-', '/', '%', '\\^',
+                           '\\.\\.',
+                           '=', '\\+=', '\\*=', '-=', '/=', '%=', '\\='],
+            'separator' : ['\\(', '\\)', ','],
+            'comment'   : ['--(?!\\[\\[).*(\n|$)'],
+            'newline'   : PATTERNS['NEWLINES'],
+            'blank'     : PATTERNS['BLANKS'],
+            'wrong_int' : PATTERNS['WRONG_INTEGER'],
+        },
+        ['wrong_integer'],
+        {
+            'ante_identifier': ['function'],
+        }
+    ),
     'game': Language('game',
         {
             'number': ['\\d+'],

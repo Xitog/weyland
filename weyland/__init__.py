@@ -27,13 +27,13 @@
 """Weyland: provides an alternative way to write regular expression (regex) and a lexer using them."""
 
 # Version of the weyland package
-__version__ = "0.2.0"
+__version__ = "0.2.6"
 
 # Imports
 import logging
 #from weyland.regex import *
 from weyland.lexer import *
-from weyland.languages import RECOGNIZED_LANGUAGES, LANGUAGES, Language
+from weyland.languages import RECOGNIZED_LANGUAGES, LANGUAGES, PATTERNS, Language
 
 logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s')
 logging.getLogger().setLevel(logging.DEBUG)

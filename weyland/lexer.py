@@ -30,7 +30,7 @@
 # Imports
 #-------------------------------------------------------------------------------
 
-from weyland.languages import Language, LANGUAGES
+from weyland.languages import Language, LANGUAGES, PATTERNS
 import html
 import re
 
@@ -64,6 +64,17 @@ class Token:
 
     def get_start(self):
         return self.start
+
+    def __eq__(self, o):
+        if type(o) != Token:
+            return False
+        return self.typ == o.typ and self.value == o.value and self.start == o.start
+
+    def __ne__(self, o):
+        return not self.__eq__(o)
+
+    def __repr__(self):
+        return f"<{self.typ}:{self.value}@{self.start}>"
 
     def __str__(self):
         return f"Token {self.typ:20s}  |{(ln(self.value) + '|'):10s}  {len(self.value)} @{self.start}"
@@ -134,9 +145,11 @@ class Lexer:
                        raise LexingException(f'A wrong token definition {old[0].typ} : {old[0].elem} has been validated by the lexer: {content}')
                     if old[0].typ not in discards:
                         tokens.append(Token(old[0].typ, content, old[0].start))
+                        if debug:
+                            print('token emis: ' + repr(tokens[-1]))
                     word = ''
-                    i -= 1
                     start = i
+                    i -= 1
             old = matched
             matched =[]
             i += 1
@@ -150,6 +163,8 @@ class Lexer:
                 raise LexingException(f'A wrong token definition {old[0].typ} : {old[0].elem} has been validated by the lexer: {content}')
             if old[0].typ not in discards:
                 tokens.append(Token(old[0].typ, content, old[0].start))
+                if debug:
+                    print('token emis: ' + repr(tokens[-1]))
         elif len(word) > 0:
             raise LexingException(f'Text not lexed at the end: |{word}| in |{ln(text)}|')
         return tokens
@@ -208,24 +223,41 @@ class Test:
 # Globals and constants
 #-------------------------------------------------------------------------------
 
-lex = Lexer(LANGUAGES['lua'], ['blank'])
+lex_lua = Lexer(LANGUAGES['lua'], ['blank'])
+lex_ash = Lexer(LANGUAGES['ash'], ['blank'])
+
 TESTS = [
-    Test(lex, '3+5', ['number', 'operator', 'number']),
-    Test(lex, 'a = 5', ['identifier', 'operator', 'number']),
-    Test(lex, 't = { ["k1"] = 5 }', ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator']),
-    Test(lex, 't = { ["k1"] = 5, ["k2"] = "v", [4] = 6 } -- Définition\nprint(t["k1"]) -- Accès\nprint(t.k1) -- Accès avec sucre syntaxique',
+    Test(lex_lua, '3+5', ['number', 'operator', 'number']),
+    Test(lex_lua, 'a = 5', ['identifier', 'operator', 'number']),
+    Test(lex_lua, 't = { ["k1"] = 5 }', ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator']),
+    Test(lex_lua, 't = { ["k1"] = 5, ["k2"] = "v", [4] = 6 } -- Définition\nprint(t["k1"]) -- Accès\nprint(t.k1) -- Accès avec sucre syntaxique',
             ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator',
              'separator', 'string', 'separator', 'operator', 'string', 'separator', 'separator', 'number', 'separator', 'operator', 'number',
              'separator', 'comment', 'special', 'separator', 'identifier', 'separator', 'string', 'separator', 'separator', 'comment',
              'special', 'separator', 'identifier', 'operator', 'identifier', 'separator', 'comment']),
-    Test(lex, '--[[Ceci est un\nz--]]', ['comment']),
-    Test(lex, '--[[Ceci est un\ncommentaire multiligne--]]', ['comment'])
+    Test(lex_lua, '--[[Ceci est un\nz--]]', ['comment']),
+    Test(lex_lua, '--[[Ceci est un\ncommentaire multiligne--]]', ['comment']),
+    Test(lex_ash, '2..3', ['number', 'operator', 'number']),
+    Test(lex_ash, 'a = 5', ['identifier', 'operator', 'number'])
 ]
 
 #TESTS = [Test(lex, '3+5', ['number', 'operator', 'number']),]
 
 def tests(debug=False):
+    ok = 0
     for index, t in enumerate(TESTS):
-        t.test(index + 1, debug)
+        try:
+            t.test(index + 1, debug)
+            ok += 1
+        except Exception as e:
+            print(e)
+    print('-----------------------------')
+    print(f'SUCCESS: {ok:5d}')
+    print(f'FAILED:  {(len(TESTS)-ok):5d}')
 
-#tests(True)
+if __name__ == '__main__':
+    print(Token('number', 5, 0) == Token('number', 5, 0)) # True
+    print(Token('number', 5, 0) != Token('number', 5, 1)) # True
+    print(Token('number', 5, 0) == Token('number', 5, 1)) # False
+    print(repr(Token('number', 5, 0)))
+    tests(True)
