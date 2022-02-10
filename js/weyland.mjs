@@ -1,1365 +1,666 @@
-/**
- * Evolutions from Weyland 0.x :
- * Replaced option and repeat parameters by min and max.
- * - min=0 => option
- * - max>1 => repeat
- * Added choice parameter to distinguish between choice [ ] and group ( )
- *
- * Added possibility of grouping
- * Added alternative operator |
- *
- * Classes + Modifiers + Custom Classes
- * Todo : invert Custom Classes, range in Custom Classes, group, named group, match
- */
+// -----------------------------------------------------------
+// MIT Licence (Expat License Wording)
+// -----------------------------------------------------------
+// Copyright © 2020, Damien Gouteux
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+// For more information about my projects see:
+// https://xitog.github.io/dgx (in French)
 
-function d(level, s)
+// This file provides several languages definitions :
+//   text
+//   bnf
+//   hamill
+//   game
+//   ash
+//   json
+//   lua
+//   python
+//   line
+//   test
+
+//-------------------------------------------------------------------------------
+// Functions
+//-------------------------------------------------------------------------------
+
+function ln(s)
 {
-    console.log('    '.repeat(level) + s);
+    return s.replace('\n', '<NL>');
 }
 
-function w(s)
-{
-    return s.replace('\n', Element.NewLineCode).replace(' ', Element.WhiteSpaceCode);
-}
+//-------------------------------------------------------------------------------
+// Class
+//-------------------------------------------------------------------------------
 
-function assert(condition, message)
+class Language
 {
-    if (!condition)
+    constructor(name, definitions, wrong=[], specials={})
     {
-        throw new Error(`Assertion failed: ${message}`);
+        this.name = name;
+        if (typeof definitions !== 'object')
+        {
+            throw new Error("Tokens should be an object of {type: [regex]} and it is a " + typeof definitions);
+        }
+        this.definitions = definitions;
+        for (const [type, variants] of Object.entries(definitions))
+        {
+            if (variants === null || variants === undefined)
+            {
+                throw new Error(`No variants for ${type} in language ${name}`);
+            }
+        }
+        // In order to match the entire string we put ^ and $ at the start of each regex
+        for (const variants of Object.values(definitions))
+        {
+            for (let index of Object.keys(variants))
+            {
+                if (typeof variants[index] !==  "object")
+                {
+                    let pattern = variants[index];
+                    if (pattern[0] !== '^') { pattern = '^' + pattern;}
+                    if (pattern[pattern.length-1] !== '$') { pattern += '$'}
+                    if (pattern.includes('[\\s\\S]'))
+                    {
+                        variants[index] = new RegExp(pattern, 'm');
+                    } else {
+                        variants[index] = new RegExp(pattern);
+                    }
+                }
+            }
+        }
+        this.specials = specials;
+        this.wrong = wrong;
+    }
+
+    isWrong(type)
+    {
+        return this.wrong.includes(type);
+    }
+
+    getName()
+    {
+        return this.name;
+    }
+
+    getTypeDefinitions()
+    {
+        return Object.entries(this.definitions);
+    }
+
+    getNumberOfTypes()
+    {
+        return Object.keys(this.definitions).length;
+    }
+
+    getNumberOfRegex()
+    {
+        let sum = 0;
+        for (const [k, v] of Object.entries(this.definitions))
+        {
+            sum += v.length;
+        }
+        return sum;
+    }
+
+    toString()
+    {
+        return `Language ${this.getName()} with ${this.getNumberOfTypes()} types and ${this.getNumberOfRegex()} regex`;
     }
 }
 
-//-----------------------------------------------------------------------------
-// La classe Char
-//-----------------------------------------------------------------------------
-
-/**
- * La classe char
- * Elle permet de faire abstraction des échappements de caractère.
- * Lorsque l'on demande si ce caractère est-il ")" avec is(")"), c'est implicite qu'il n'est pas échappé.
- */
-class Char
+class Token
 {
-    constructor(value, escaped=false)
+    constructor(type, value, start)
     {
+        this.type = type;
         this.value = value;
-        this.escaped = escaped;
+        this.start = start;
     }
 
-    is(element)
+    getType()
     {
-        return (element === this.value && !this.escaped);
+        return this.type;
     }
 
-    isEscaped(element)
+    getValue()
     {
-        return (element === this.value && this.escaped);
+        return this.value;
     }
 
-    toRepr()
+    getStart()
     {
-        let s = this.escaped ? "\\" : "";
-        let v = this.value === '\n' ? '<NL>' : this.value;
-        s += v;
-        return s;
+        return this.start;
     }
 
     toString()
     {
-        return 'Char |' + this.toRepr() + '| esc? ' + this.escaped;
+        return `Token ${this.type.padEnd(20)}  |${(ln(this.value) + '|').padEnd(10)}  #${this.value.length}} @${this.getStart()}`;
     }
 }
 
-//-----------------------------------------------------------------------------
-// La classe Element
-//-----------------------------------------------------------------------------
-
-class Element
+class Lexer
 {
-    constructor(value, parent=null)
+    constructor(lang, discards=[])
     {
-        this.raw = value;
-        this.parent = parent;
-        this.min = 1;
-        this.max = 1;
-        this.quantifier = Element.Normal;
-        this.value = value.replace("\n", Element.NewLineCode)
-    }
-
-    getPattern()
-    {
-        return w(this.value);
-    }
-
-    setQuantifier(qt)
-    {
-        if (qt !== Element.Normal && qt !== Element.Greedy && qt !== Element.Lazy && qt !== Element.Possessive)
+        if (typeof lang === "string")
         {
-            throw "Quantifier not known: " + qt;
-        }
-        this.quantifier = qt;
-    }
-
-    getQuantifier()
-    {
-        return this.quantifier;
-    }
-
-    cardToString()
-    {
-        let card = "";
-        if (this.min !== 1 || this.max !== 1)
-        {
-            let max = (this.max === -1) ? "*" : this.max;
-            card = " {" + this.min + ", " + max + "}";
-            if (this.quantifier !== Element.Normal)
-            {
-                card += ' ' + this.quantifier;
-            }
-        }
-        return card;
-    }
-
-    toString()
-    {
-        let card = this.cardToString();
-        return this.constructor.name + " " + this.getPattern() + card;
-    }
-
-    info(level=0, prefix='')
-    {
-        return '    '.repeat(level) + prefix + this.toString();
-    }
-
-    isOptionnal()
-    {
-        return this.min === 0;
-    }
-
-    isRepeatable()
-    {
-        return this.max > 1;
-    }
-
-    setCard(min, max)
-    {
-        if (min > max)
-        {
-            throw "Max cardinality must be superior or equal to min cardinality";
-        }
-        this.min = min;
-        this.max = max;
-    }
-
-    getMin()
-    {
-        return this.min;
-    }
-
-    getMax()
-    {
-        return this.max;
-    }
-
-    match(candidate, start=0, level=0, debug=false)
-    {
-        let matched = 0;
-        for (let i = start; i < candidate.length && matched < this.max; i++)
-        {
-            if (candidate[i] === this.raw)
-            {
-                matched += 1;
-            }
-            else
-            {
-                break;
-            }
-            if (debug)
-            {
-                d(level, `Element#match: ${candidate[i]} vs ${this} nb matched=${matched} @${i}`);
-            }
-            // A lazy Element should match as least as possible
-            if (this.getQuantifier() === Element.Lazy && matched === this.getMin())
-            {
-                break;
-            }
-        }
-        let res = (matched >= this.min);
-        return new Match(this, candidate, res, start, matched);
-    }
-
-}
-
-// Quantifiers
-Element.ZeroOrOne = '?'; // Can be lazy too
-Element.OneOrMore = '+';
-Element.ZeroOrMore = '*';
-Element.Normal = '';
-Element.Greedy = 'greedy';
-Element.Lazy = 'lazy';
-Element.Possessive = 'possessive';
-// Others
-Element.Escape = '\\';
-// For clean display
-Element.NewLineCode = "<NL>";
-Element.WhiteSpaceCode = "<WS>";
-
-//-----------------------------------------------------------------------------
-// La classe Special
-//-----------------------------------------------------------------------------
-
-class Special extends Element
-{
-    constructor(value, parent=null)
-    {
-        super(value, parent);
-        if (value !== Special.Alpha && value !== Special.Digit && value !== Special.AlphaNum
-            && value !== Special.Space && value !== Special.Any)
-        {
-            throw "A special element must be digit, letter, space or word not: |" + value + "|";
-        }
-    }
-
-    match(candidate , start=0, level=0, debug=false)
-    {
-        let matched = 0;
-        let res = null;
-        for (let i = start; i < candidate.length && matched < this.max; i++)
-        {
-            if (this.value === Special.Alpha)
-            {
-                res = Special.Letters.includes(candidate[i]);
-            }
-            else if (this.value === Special.Digit)
-            {
-                res = Special.Digits.includes(candidate[i]);
-            }
-            else if (this.value === Special.AlphaNum)
-            {
-                res = (candidate[i] === '_' || Special.Latin.includes(candidate[i]) || Special.Digits.includes(candidate[i]));
-            }
-            else if (this.value === Special.Space)
-            {
-                res = Special.Spaces.includes(candidate[i]);
-            }
-            else if (this.value === Special.Any)
-            {
-                res = (candidate[i] !== '\n');
-            }
-            if (res)
-            {
-                matched += 1;
-                if (debug)
-                {
-                    d(level, 'Special#match: ' + candidate[i] + " vs " + this + " nb matched= " + matched + " / " + this.max);
-                }
-            }
-            else
-            {
-                break;
-            }
-            // A lazy Element should match as least as possible
-            if (this.getQuantifier() === Element.Lazy && matched === this.getMin())
-            {
-                break;
-            }
-        }
-        res = false;
-        if (matched >= this.min)
-        {
-            res = true;
-        }
-        //if (!res && i < candidate.length) // we break because of a bad thing, not because we reached the end of the candidate string
-        //{
-        //    matched = 0;
-        //}
-        return new Match(this, candidate, res, start, matched);
-    }
-}
-// Classes
-Special.Alpha = '@';
-Special.AlphaEscaped = 'a';
-Special.Digit = '#';
-Special.DigitEscaped = 'd';
-Special.AlphaNum = '&'; // w (alpha + digit + _)
-Special.AlphaNumEscaped = 'w';
-Special.Space = '°';    // s (' ', '\t', '\n', '\f')
-Special.SpaceEscaped = 's';
-Special.Any = '.';
-// Base
-Special.Spaces = [' ', '\t', '\n', '\f'];
-Special.Digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-Special.Latin = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-                 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-                 'U', 'V', 'W', 'X', 'Y', 'Z',
-                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
-                 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
-                 'u', 'v', 'w', 'x', 'y', 'z'];
-Special.Letters = Special.Latin + [
-                'Á', 'À', 'Â', 'Ä', 'Å', 'Ă', 'Æ', 'Ç', 'É', 'È', 'Ê', 'Ë', 'Í', 'Ì', 'Î', 'Œ', 'Ñ',
-                'Ó', 'Ò', 'Ô', 'Ö', 'Ø', 'Ú', 'Ù', 'Û', 'Ü', 'Š', 'Ș', 'Ț', 'Ž', 'ẞ',
-                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
-                'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
-                'u', 'v', 'w', 'x', 'y', 'z',
-                'á', 'à', 'â', 'ä', 'å', 'ă', 'æ', 'ç', 'é', 'è', 'ê', 'ë', 'í', 'ì', 'î', 'œ', 'ñ',
-                'ó', 'ò', 'ô', 'ö', 'ø', 'ú', 'ù', 'û', 'ü', 'š', 'ș', 'ț', 'ž', 'ß'];
-
-//-----------------------------------------------------------------------------
-// La classe Class
-//-----------------------------------------------------------------------------
-
-class Class extends Element
-{
-    constructor(value, parent=null, elements=null, inverted=false)
-    {
-        super(value, parent);
-        this.inverted = inverted;
-        if (elements === null || elements.length <= 1)
-        {
-            throw "A class must have at least two elements.";
-        }
-        this.elements = elements;
-    }
-
-    getPattern()
-    {
-        if (this.inverted)
-        {
-            return '[^' + this.value + ']';
-        }
-        return '[' + this.value + ']';
-    }
-
-    toString()
-    {
-        let card = this.cardToString();
-        let nb = " (" + this.elements.length + ")";
-        let inverted = (this.inverted) ? " inverted" : ""
-        return "Class " + this.getPattern() + ' ' + card + nb + inverted;
-    }
-
-    info(level=0, prefix='')
-    {
-        return '    '.repeat(level) + prefix + this.toString();
-    }
-
-    match_inverted(candidate, start=0, level=0, debug=false)
-    {
-        if (debug)
-        {
-            d(level, 'Class#match_inverted: START cand[' + start + ',]=|' + w(candidate.substring(start)) + "| vs class=" + this.getPattern());
-        }
-        let nb_matched = 0;
-        let matched = false;
-        for (let i = start; i < candidate.length && nb_matched < this.max; i++)
-        {
-            for (let elem of this.elements)
-            {
-                let res = elem.match(candidate, i, level + 1, debug);
-                if (res.isMatch())
-                {
-                    matched = true;
-                    break;
-                }
-            }
-            if (matched)
-            {
-                break;
-            }
-            else
-            {
-                nb_matched += 1;
-            }
-        }
-        let final_matched = nb_matched >= this.min ? true : false;
-        if (debug)
-        {
-            d(level, 'Class#match_inverted: END |' + w(candidate.substring(start, start + nb_matched)) + "| vs " + this.getPattern() + " matched=" + final_matched);
-        }
-        if (!final_matched)
-        {
-            let partial = nb_matched > 0 ? true : false;
-            return new Match(this, '', false, start, 0, partial);
-        }
-        else
-        {
-            return new Match(this, candidate, true, start, nb_matched, false);
-        }
-    }
-
-    match(candidate , start=0, level=0, debug=false)
-    {
-        if (this.inverted)
-        {
-            return this.match_inverted(candidate, start, level, debug);
-        }
-        if (debug)
-        {
-            d(level, 'Class#match: START cand[' + start + ',]=|' + w(candidate.substring(start)) + "| vs class=[" + this.value + "]");
-        }
-        let matched = new MatchSet(this, candidate, false, start); // element, text, match, start, length, partial
-        for (let i = start; i < candidate.length && matched.raw_size() < this.max; i++)
-        {
-            let has_matched = false;
-            for (let elem of this.elements)
-            {
-                let res = elem.match(candidate, i, level + 1, debug);
-                if (debug)
-                {
-                    d(level + 1, `---> elem: ${elem} res: ${res.match} str: ${res.toString()} = |${w(res.getMatched(candidate))}|`);
-                }
-                if (res.isMatch())
-                {
-                    has_matched = true;
-                    matched.push(res);
-                    break;
-                }
-            }
-            // We must check if it has matched at least once, without we can't proceed to the next char in candidate string
-            if (!has_matched)
-            {
-                break;
-            }
-            // A lazy Element should match as least as possible
-            if (this.getQuantifier() === Element.Lazy && matched.length === this.getMin())
-            {
-                break;
-            }
-        }
-        // MatchSet#size return null if there is no match (=dangerous!)
-        // We use raw_size to have always the true size matched
-        if (matched.raw_size() >= this.min)
-        {
-            matched.match = true;
-        }
-        if (debug)
-        {
-            d(level, 'Class#match: END ' + w(candidate) + " vs [" + this.value + "] matched=" + matched.match);
-        }
-        return matched;
-    }
-}
-// Custom classes
-Class.Open = '[';
-Class.Close = ']';
-Class.Invert = '^';
-Class.Range = '-';
-
-//-----------------------------------------------------------------------------
-// Group
-//-----------------------------------------------------------------------------
-
-class Group extends Element
-{
-
-    constructor(value, parent=null, elements=null)
-    {
-        super(value, parent);
-        this.elements = elements === null ? [] : elements;
-        for (let e of this.elements)
-        {
-            e.parent = this;
-        }
-    }
-
-    getPattern()
-    {
-        return '(' + this.value + ')';
-    }
-
-    push(element)
-    {
-        this.elements.push(element);
-    }
-
-    last()
-    {
-        return ((this.elements.length > 0) ? this.elements[this.elements.length - 1] : null);
-    }
-
-    info(level=0, prefix='')
-    {
-        let s = '    '.repeat(level) + prefix + this.toString() + "\n";
-        for (let i = 0; i < this.elements.length; i++)
-        {
-            s +=  this.elements[i].info(level + 1, i.toString().padStart(2, '0') + '. ');
-            if (i + 1 < this.elements.length)
-            {
-                s += "\n";
-            }
-        }
-        return s;
-    }
-
-    size()
-    {
-        return this.elements.length;
-    }
-
-    toString()
-    {
-        let card = this.cardToString();
-        return 'Group ' + this.getPattern() + ' (' + this.elements.length + ')' + card;
-    }
-
-    match(candidate , start=0, level=0, debug=false)
-    {
-        if (debug)
-        {
-            d(level, 'Group#match: START cand=|' + w(candidate) + '| vs seq=|' + this.value + '| start=' + start);
-        }
-        let matched = new MatchSet(this, candidate, false, start);
-        let index_candidate = start;
-        let index_regex = 0;
-        let nb_matched = 0;
-        while (index_candidate < candidate.length && index_regex < this.elements.length)
-        {
-            let elem = this.elements[index_regex];
-            if (debug)
-            {
-                d(level + 1, 'group ic=' + index_candidate + ' ir=' + index_regex + ' ' +
-                            w(candidate.substring(index_candidate)) + ' vs '+ elem.toString());
-            }
-            // Lazy est déjà géré par les matchs, sinon c'est possessive
-            let res = elem.match(candidate, index_candidate, level + 2, debug);
-            if (!res.isMatch())
-            {
-                // Optionalité
-                if (elem.getMin() === 0  && index_regex + 1 < this.elements.length)
-                {
-                    if (debug)
-                    {
-                        d(level + 1, '---> no result, passing to next');
-                    }
-                    index_regex += 1;
-                    continue;
-                }
-                // Greedyness
-                else if (matched.size() >= 1
-                         // We are greedy
-                         && matched[matched.length-1].getElement().getQuantifier() === Element.Greedy
-                         // We have room to reduce
-                         && matched[matched.length-1].getElement().getMin() < matched[matched.length-1].size())
-                {
-                    // Backtracking
-                    let last_res = matched[matched.length - 1];
-                    let last = last_res.getElement();
-                    let index_candidate_start_next = index_candidate
-                    d(level + 2, 'backtracking before no result');
-                    while (last.getMin() < last_res.size() && !res.isMatch())
-                    {
-                        last_res.reduce(1, level + 1, debug);
-                        index_candidate_start_next -= 1;
-                        res = elem.match(candidate, index_candidate_start_next, level + 3, debug);
-                    }
-                }
-                else
-                {
-                    if (debug)
-                    {
-                        d(level + 1, '---> no result, breaking');
-                    }
-                    break;
-                }
-            }
-            matched.push(res);
-            index_regex += 1;
-            index_candidate += res.size();
-            if (debug)
-            {
-                d(level + 1, '---> ' + res.toString() + ' = |' + w(res.getMatched(candidate)) + '|');
-            }
-            if (index_regex === this.elements.length)
-            {
-                nb_matched += 1;
-                if (nb_matched < this.max)
-                {
-                    index_regex = 0; // Restart
-                }
-            }
-            //let len = matched.reduce((a, b) => a.size() + b, 0);
-            //console.log('        iter index_candidate=' + index_candidate + '/' + (stop - start - 1) +
-            //                            ' index_regex=' + index_regex + '/' + (this.elements.length - 1) +
-            //                            ' ' + candidate[index_candidate] + ' vs ' + elem + ' => ' + res);
-            // Not all regex elements has been taken, we are going to have a partial match => backtracking
-            console.log('a', index_candidate, candidate.length, index_regex, this.elements.length, matched.size());
-            if (index_candidate >= candidate.length
-                && index_regex < this.elements.length
-                && matched.size() >= 1
-                // We are greedy
-                && matched[matched.length-1].getElement().getQuantifier() === Element.Greedy
-                // We have room to reduce
-                && matched[matched.length-1].getElement().getMin() < matched[matched.length-1].size())
-            {
-                let last_res = matched[matched.length - 1];
-                let last = last_res.getElement();
-                let index_candidate_start_next = index_candidate
-                d(level + 2, 'backtracking before ending text');
-                while (last.getMin() < last_res.size() && !res.isMatch())
-                {
-                    last_res.reduce(1, level + 1, debug);
-                    index_candidate_start_next -= 1;
-                    res = elem.match(candidate, index_candidate_start_next, level + 3, debug);
-                }
-           }
-        }
-        if (debug)
-        {
-            d(level, 'Group#match: END icand=' + index_candidate + ' iregex=' + index_regex + ' lregex=' + this.elements.length + ' parent=' + this.parent);
-        }
-        // ???
-        matched.match = (nb_matched > 0); // (index_regex === this.elements.length);
-        // Si tous les suivants sont optionnels, c'est un match quand même
-        let all_optional = true;
-        for (let i = index_regex; i < this.elements.length; i++)
-        {
-            if (!this.elements[i].isOptionnal())
-            {
-                all_optional = false;
-                break;
-            }
-        }
-        if (all_optional)
-        {
-            matched.match = true;
-        }
-        matched.partial = (index_candidate === candidate.length && index_regex < this.elements.length);
-        if (matched.match)
-        {
-            matched.partial = false; // On force à false si matched
-        }
-        return matched;
-    }
-}
-Group.Open = '(';
-Group.Close = ')';
-
-//-----------------------------------------------------------------------------
-// Choice
-//-----------------------------------------------------------------------------
-
-class Choice extends Group
-{
-    getPattern()
-    {
-        let s = '(';
-        for (let e of this.elements)
-        {
-            s += e.getPattern() + '|';
-        }
-        if (s.length > 1)
-        {
-            s = s.substring(0, s.length-1);
-        }
-        s += ')'
-        return s;
-    }
-
-    toString()
-    {
-        let card = this.cardToString();
-        return 'Choice ' + this.getPattern() + ' (' + this.elements.length + ')' + card;
-    }
-
-    match(candidate , start=0, level=0, debug=false)
-    {
-        if (debug)
-        {
-            d(level, 'Choice#match: START cand=|' + candidate + '| vs seq=|' + this.value + '| start=' + start);
-        }
-        let matched = new MatchSet(this, candidate, false, start);
-        let index_candidate = start;
-        while (matched.raw_size() < this.getMax() && index_candidate < candidate.length)
-        {
-            let index_option = 0;
-            while (index_option < this.elements.length)
-            {
-                let elem = this.elements[index_option];
-                if (debug)
-                {
-                    d(level + 1, 'choice ic=' + index_candidate + ' io=' + index_option + ' ' +
-                                w(candidate.substring(index_candidate)) + ' vs '+ elem.toString());
-                }
-                let res = elem.match(candidate, index_candidate, level + 2, debug);
-                if (!res.isMatch())
-                {
-                    index_option += 1;
-                }
-                else
-                {
-                    res.setElement(this);
-                    matched.push(res);
-                    break;
-                }
-            }
-            index_candidate += 1;
-        }
-        if (matched.raw_size() >= this.getMin())
-        {
-            matched.match = true;
-        }
-        else // Setting partial on last result
-        {
-            if (matched.getNbElementMatched() > 0 && matched.get(matched.getNbElementMatched() - 1).isPartial())
-            {
-                matched.partial = true;
-            }
-        }
-        return matched;
-    }
-}
-Choice.Alternative = '|';
-
-//-----------------------------------------------------------------------------
-// La classe Regex
-//-----------------------------------------------------------------------------
-
-class Regex
-{
-    constructor(pattern, autocompile=true)
-    {
-
-        this.raw = pattern;
-        assert(pattern !== null, "Pattern cannot be null.");
-        assert(typeof pattern === "string", `Pattern should be a string, instead it is: ${typeof pattern}.`);
-        this.pattern = pattern.replace('\n', '\\n');
-        this.root = null;
-        if (autocompile)
-        {
-            this.compile();
-        }
-    }
-
-    toString()
-    {
-        return 'Regex |' + this.pattern + '|';
-    }
-
-    getPattern()
-    {
-        return this.pattern;
-    }
-
-    info()
-    {
-        return this.root.info();
-    }
-
-    precompile()
-    {
-        // Transformation de la chaîne en une liste de Char : fusion de \x en un seul char (ne compte plus pour 2 !)
-        // Cas particulier : \\x : le premier escape le deuxième qui n'escape pas le troisième.
-        let temp = [];
-        let escaped = false;
-        for (let i = 0; i < this.raw.length; i++)
-        {
-            let current = this.raw[i];
-            if (current === "\\" && !escaped)
-            {
-                escaped = true;
-            }
-            else
-            {
-                if (escaped && !Regex.Escapables.includes(current))
-                {
-                    temp.push(new Char("\\", false));
-                    temp.push(new Char(current, false));
-                }
-                else
-                {
-                    temp.push(new Char(current, escaped));
-                }
-                escaped = false;
-            }
-        }
-        if (escaped) // Si on finit par un \ on le met mais ça ne passera pas les checks
-        {
-            temp.push(new Char(this.raw[this.raw.length-1], false));
-        }
-        // Checks
-        if (temp.length === 0)
-        {
-            throw "A regex must have at least one char.";
-        }
-        if (temp[0].is(Element.ZeroOrMore) || temp[0].is(Element.ZeroOrOne) || temp[0].is(Element.OneOrMore))
-        {
-            throw new Error(`A regex cannot start with a quantifier : |${this.raw}|.`);
-        }
-        if (temp[0].is(Choice.Alternative))
-        {
-            throw "A regex cannot start with an alternate char.";
-        }
-        if (temp[0].is(Class.Close))
-        {
-            throw "A regex cannot start with a closing class char.";
-        }
-        if (temp[temp.length-1].is(Element.Escape))
-        {
-            throw "A regex cannot finish with an escaped char.";
-        }
-        return temp;
-    }
-
-    compile_specials(current, target)
-    {
-        if (target === null || target === undefined)
-        {
-            throw "Target must not be null in order to add the special to it.";
-        }
-        let res = true;
-        if (current.is(Special.Digit) || current.isEscaped(Special.DigitEscaped))
-        {
-            target.push(new Special(Special.Digit));
-        }
-        else if (current.is(Special.Alpha) || current.isEscaped(Special.AlphaEscaped))
-        {
-            target.push(new Special(Special.Alpha));
-        }
-        else if (current.is(Special.Space) || current.isEscaped(Special.SpaceEscaped))
-        {
-            target.push(new Special(Special.Space));
-        }
-        else if (current.is(Special.AlphaNum) || current.isEscaped(Special.AlphaNumEscaped))
-        {
-            target.push(new Special(Special.AlphaNum));
-        }
-        else if (current.is(Special.Any))
-        {
-            target.push(new Special(Special.Any));
-        }
-        else
-        {
-            res = false; // not a class
-        }
-        return res;
-    }
-
-    find_next_symbol(text, start, symbol, counter_symbol=null)
-    {
-        let index = null;
-        let level = 0;
-        for (let i = start ; i < text.length ; i++)
-        {
-            if (text[i].is(symbol) && level === 0)
-            {
-                index = i;
-                break;
-            }
-            else if (text[i].is(symbol) && level > 0)
-            {
-                level -= 1;
-            }
-            else if (counter_symbol !== null && text[i].is(counter_symbol))
-            {
-                level += 1;
-            }
-        }
-        return index;
-    }
-
-    subcompile(temp, start, end, parent=null)
-    {
-        let multigroups = []; // Si on a un choice, on aura plusieurs groupes dedans
-        let elements = [];
-        let pattern = "";
-        // Tree
-        for (let i = start; i < end; i++)
-        {
-            let current = temp[i];
-            pattern += current.toRepr();
-            let prev = elements.length > 0 ? elements[elements.length - 1] : null;
-            // Classes
-            if (this.compile_specials(current, elements))
-            {
-                // everything is done in the function, do nothing here.
-            }
-            // Custom classes
-            else if (current.is(Class.Open))
-            {
-                let value = "";
-                let members = [];
-                let inverted = false;
-                let closing = this.find_next_symbol(temp, i + 1, Class.Close);
-                if (closing === null)
-                {
-                    throw "No ending ] for [ at " + i;
-                }
-                for (let j = i + 1; j < closing; j++)
-                {
-                    if (j == i + 1 && temp[j].is(Class.Invert))
-                    {
-                        inverted = true;
-                    }
-                    else if (this.compile_specials(temp[j], members))
-                    {
-                        // including in members is done in the function.
-                        value += temp[j].value;
-
-                    }
-                    else
-                    {
-                        members.push(new Element(temp[j].value));
-                        value += temp[j].value;
-                    }
-                    pattern += temp[j].toRepr();
-                }
-                if (members.length < 2)
-                {
-                    throw "A custom class must have at least 2 elements."
-                }
-                elements.push(new Class(value, null, members, inverted));
-                i = closing;
-                pattern += temp[closing].toRepr();
-            }
-            // Quantifiers
-            else if (current.is(Element.OneOrMore)) // +
-            {
-                // There was a previous modifier, this one is making it possessive
-                if (prev !== null && (prev.min !== 1 || prev.max !== 1))
-                {
-                    prev.setQuantifier(Element.Possessive);
-                }
-                else
-                {
-                    prev.max = Infinity;
-                    prev.setQuantifier(Element.Greedy);
-                }
-            }
-            else if (current.is(Element.ZeroOrMore)) // *
-            {
-                if (prev === null)
-                {
-                    throw "Cannot start with *";
-                }
-                prev.min = 0;
-                prev.max = Infinity;
-                prev.setQuantifier(Element.Greedy);
-            }
-            else if (current.is(Element.ZeroOrOne)) // ?
-            {
-                // There was a previous modifier, this one is making it lazy
-                if (prev !== null && (prev.min !== 1 || prev.max !== 1))
-                {
-                    prev.setQuantifier(Element.Lazy);
-                }
-                else
-                {
-                    prev.min = 0;
-                    prev.setQuantifier(Element.Greedy);
-                }
-            }
-            else if (current.is(Group.Open))
-            {
-                let closing = this.find_next_symbol(temp, i + 1, Group.Close, Group.Open);
-                if (closing === null)
-                {
-                    throw "No ending ) for ( at " + i;
-                }
-                elements.push(this.subcompile(temp, i + 1, closing, null));
-                i = closing;
-            }
-            else if (current.is(Choice.Alternative))
-            {
-                // Save current
-                let g = null;
-                if (elements.length > 1)
-                {
-                    g = new Group(pattern, null, elements);
-                }
-                else if (elements.length === 1)
-                {
-                    g = elements[0];
-                }
-                else
-                {
-                    throw "No alternative detected";
-                }
-                multigroups.push(g); // Can hold groups or elements for a choice
-                // Reset current
-                pattern = '';
-                elements = [];
-            }
-            else
-            {
-                elements.push(new Element(current.value));
-            }
-        }
-        if (multigroups.length === 0)
-        {
-            return new Group(pattern, parent, elements);
-        }
-        else
-        {
-            // Save last (repeated)
-            let g = null;
-            if (elements.length > 1)
-            {
-                g = new Group(pattern, null, elements);
-            }
-            else if (elements.length === 1)
-            {
-                g = elements[0];
-            }
-            else
-            {
-                throw "No alternative detected";
-            }
-            multigroups.push(g); // Can hold groups or elements for a choice
-            let complete_pattern = "";
-            for (let g of multigroups)
-            {
-                complete_pattern += g.value;
-            }
-            return new Choice(complete_pattern, parent, multigroups);
-        }
-    }
-
-    compile()
-    {
-        let temp = this.precompile();
-        this.root = this.subcompile(temp, 0, temp.length);
-        this.root.value = this.pattern; // Hack to have the full regex
-        if (this.root.size() === 0)
-        {
-            throw "Impossible to have a regex with 0 element.";
-        }
-    }
-
-    match(text, debug=false)
-    {
-        return this.root.match(text, 0, 0, debug);
-    }
-}
-
-// Standard PCRE Regex Special char (15) : . ^ $ * + - ? ( ) [ ] { } \ |
-// Added (3) : @ # &
-
-/*
-Char.Start = '^';
-Char.End = '$';
-
-Char.NameGroup = '?'
-Char.OpenNameGroup = '<';
-Char.CloseNameGroup = '>';
-
-Char.OpenRepeat = '{';
-Char.CloseRepeat = '}';
-Char.SeparatorRepeat = ',';
-
-Char.StartCode = "<START>";
-Char.EndCode = "<END>";
-*/
-
-Regex.Escapables = [
-    // Quantifiers
-    Element.ZeroOrOne,       // ?
-    Element.OneOrMore,       // +
-    Element.ZeroOrMore,      // *
-    // Others
-    Element.Escape,          // \
-    // Specials
-    Special.Alpha,           // @
-    Special.AlphaEscaped,    // a
-    Special.Digit,           // #
-    Special.DigitEscaped,    // d
-    Special.AlphaNum,        // &
-    Special.AlphaNumEscaped, // w
-    Special.Space,           // ° => \t, \n, \f
-    Special.SpaceEscaped,    // s
-    Special.Any,             // .
-    // Custom classes
-    Class.Open,              // [
-    Class.Close,             // ]
-    Class.Invert,            // ^
-    Class.Range,             // -
-    // Groups
-    Group.Open,              // (
-    Group.Close,             // )
-    // Choices
-    Choice.Alternative       // |
-];
-
-//-----------------------------------------------------------------------------
-// La classe Match
-//-----------------------------------------------------------------------------
-
-class Match
-{
-    constructor(element, text, match=false, start=null, length=null, partial=false)
-    {
-        this.elementx = element; // Regex element
-        this.text = text;       // Text candidate
-        this.start = start;     // Start of the match in text candidate
-        this.length = length;   // Length of candidate text matched
-        this.match = match;     // Matched or not?
-        this.partial = partial; // In case of not matching, is it due to not enough chars?
-        if (this.length === null && (this.match || this.partial))
-        {
-            throw new Error("A match or partial result cannot have a length of null.");
-        }
-        //this.element_matches = [];  // Length of candidate text matched for each elements of the Regex
-    }
-
-    getElement()
-    {
-        return this.elementx;
-    }
-
-    setElement(e)
-    {
-        this.elementx = e;
-    }
-
-    equals(other)
-    {
-        /*
-        console.log("    getMatched()", this.getMatched(), other.getMatched(), "\n",
-                  "   match", this.match, other.match, "\n",
-                  "   partial", this.partial, other.partial, "\n",
-                  "   length", this.length, other.length, "\n",
-                  "   element", this.elementx.toString(), other.elementx.toString());
-        */
-        return (this.elementx === other.elementx && this.getMatched() === other.getMatched() &&
-                this.match === other.match && this.partial === other.partial &&
-                this.length === other.length);
-    }
-
-    isPartial()
-    {
-        return this.partial;
-    }
-
-    isMatch()
-    {
-        return this.match;
-    }
-
-    isOverload()
-    {
-        let res = undefined;
-        if (!this.match && !this.partial)
-        {
-            res = false;
+            this.lang = LANGUAGES[lang];
+        } else if (typeof lang === "object" && lang instanceof Language) {
+            this.lang = lang;
         } else {
-            res = this.text.length > this.size();
+            throw new Exception(`Lang |${lang}| must be a recognized language or an instance of Language`);
         }
-        //console.log(`        isOverload() |${this.text}| #${this.text.length} match=${this.match} #${this.size()} overload=${res}`);
-        return res;
+        this.discards = discards;
     }
 
-    reduce(length=null, level=0, debug)
+    getLanguage()
     {
-        if (debug)
+        return this.lang;
+    }
+
+    match(start, word, debug=false)
+    {
+        let matches = [];
+        for (const [type, variants] of this.lang.getTypeDefinitions())
         {
-            let len = (length === null) ? 'to min' : length;
-            d(level, '!!!! reduce ' + len);
-        }
-        if (length === null)
-        {
-            this.length = this.elementx.getMin();
-        }
-        else
-        {
-            this.length -= length; // Length can be reduced to 0
-            if (this.length < this.elementx.getMin())
+            for (let elem of variants)
             {
-                throw "Illogical match: can't be reduced lower than element min.";
+                //if (debug) console.log(ln(word), 'vs', elem, '=', elem.test(word));
+                if (elem.test(word))
+                {
+                    if (debug) console.log('    Match: ' + type + ' : ' + variants + ' => ' + elem.test(word));
+                    matches.push([type, elem, start]);
+                }
             }
         }
+        return matches;
     }
 
-    // Pas de surchage de length en JavaScript
-    size()
+    lex(text, discards=null, debug=false)
     {
-        return this.length;
+        discards = discards === null ? this.discards : discards;
+        let word = '';
+        let old = null;
+        let matched = [];
+        let tokens = [];
+        let start = 0;
+        for (let i = 0; i < text.length; i++)
+        {
+            word += text[i];
+            if (debug)
+            {
+                console.log(i, `|${ln(word)}|`);
+            }
+            matched = this.match(start, word, debug);
+            if (debug && matched.length === 0)
+            {
+                console.log('    no match this turn');
+            }
+
+            if (matched.length === 0 && (old === null || old.length === 0))
+            {
+                // Nothing, we try to add the maximum
+                //throw new Error("Impossible to map the language.");
+            } else if (matched.length === 0) { // old !== null && old.length > 0
+                // Visions: trying to see if there is something after
+                if (i + 1 < text.length)
+                {
+                    let future_index = i + 1;
+                    let future_word = word + text[future_index];
+                    matched = this.match(start, future_word, debug);
+                    if (debug && matched.length > 0)
+                    {
+                        console.log('    vision of the future OK');
+                    }
+                }
+                // Si et seulement si dans le futur on n'aura rien on fait un jeton, sinon on continue
+                if (matched.length === 0)
+                {
+                    let content =  word.substring(0, word.length-1);
+                    if (debug)
+                    {
+                        console.log('pour le mot ' + content + ' nous avons :');
+                        for (let res of old)
+                        {
+                            console.log('    ' + res[0] + ' : ' + res[1]);
+                        }
+                    }
+                    if (this.lang.isWrong(old[0][0]))
+                    {
+                        throw new Error(`A wrong token definition ${old[0][0]} : ${old[0][1]} has been validated by the lexer: ${content}`);
+                    }
+                    if (!discards.includes(old[0][0]))
+                    {
+                        tokens.push(new Token(old[0][0], content, old[0][2]));
+                    }
+                    word = '';
+                    i -= 1;
+                    start = i;
+                }
+            }
+            old = matched;
+            matched = [];
+        }
+        if (old.length > 0)
+        {
+            let content =  word;
+            if (debug)
+            {
+                console.log('pour le mot ' + content + ' nous avons :');
+                for (let res of old)
+                {
+                    console.log('    ' + res[0] + ' : ' + res[1]);
+                }
+            }
+            if (this.lang.isWrong(old[0][0]))
+            {
+                throw new Error(`A wrong token definition ${old[0][0]} : ${old[0][1]} has been validated by the lexer: ${content}`);
+            }
+            if (!discards.includes(old[0][0]))
+            {
+                tokens.push(new Token(old[0][0], content, old[0][2]));
+            }
+        } else if (word.length > 0)
+        {
+            throw new Error(`Text not lexed at the end: ${word}`);
+        }
+        return tokens;
     }
 
-    getPositionString()
+    to_html(text=null, tokens=null, raws=[])
     {
-        if (this.size() === 1)
+        if (text === null && tokens === null)
         {
-            return '@' + this.start;
+            throw new Error("Nothing send to to_html");
+        } else if (text !== null && tokens !== null) {
+            throw new Error("Send to to_html text OR tokens, not both!");
         }
-        else if (this.size() === 0)
+        if (text !== null)
         {
-            return '';
+            tokens = this.lex(text, []) // don't discard anything, we will produce raws instead
         }
-        else
+        let output = '';
+        for (const tok of tokens)
         {
-            return '(' + this.start + ' to ' + (this.start + this.size() - 1) + ')';
+            if (raws.includes(tok.getType()))
+            {
+                output += tok.getValue();
+            } else {
+                let val = tok.getValue();
+                val = val.replace('&', '&amp;');
+                val = val.replace('>', '&gt;');
+                val = val.replace('<', '&lt;');
+                output += `<span class="${this.lang.getName()}-${tok.getType()}">${val}</span>`;
+            }
         }
-    }
-
-    toString()
-    {
-        if (this.match)
-        {
-            return 'Match {matched |' + w(this.getMatched()) + '| #' + this.length + ' ' + this.getPositionString() + '}';
-        }
-        else if (this.partial)
-        {
-            return 'Match {partial |' + w(this.getMatched()) + '| #' + this.length + ' '  + this.getPositionString() + '}';
-        }
-        else
-        {
-            return 'Match {none}';
-        }
-    }
-
-    getMatched()
-    {
-        return ((this.length === null ? '' : this.text.substring(this.start, this.start + this.length)));
+        return output;
     }
 }
 
-//-----------------------------------------------------------------------------
-// La classe MatchSet une encapsulation d'une liste de match
-//-----------------------------------------------------------------------------
-
-class MatchSet extends Match
+class Test
 {
-    constructor(element, text, match=false, start=null, length=null, partial=false)
+    constructor(lexer, text, result)
     {
-        super(element, text, match, start, length, partial);
-        this.matches = [];
-    }
-
-    push(m)
-    {
-        this.matches.push(m);
-        this.length = this.size();
-    }
-
-    get(i)
-    {
-        if (i < 0 || i > this.matches.length)
+        this.lexer = lexer;
+        this.text = text;
+        this.result = result;
+        if (this.result === null || this.result === undefined)
         {
-            throw "Index out of range: " + i + " / " + this.matches.length;
+            throw new Error(`No expected results for test ${text}`);
         }
-        return this.matches[i];
     }
 
-    last()
+    test(num=0, debug=false)
     {
-        if (this.matches.length === 0)
+        let tokens = this.lexer.lex(this.text, null, debug);
+        if (tokens.length !== this.result.length)
         {
-            throw "Cannot get the last element on an empty list";
-        }
-        return this.matches[this.matches.length - 1];
-    }
-
-    equals(other)
-    {
-        //console.log(this.size(), other.length);
-        if (this.size() !== other.length)
-        {
-            return false;
-        }
-        if (other instanceof MatchSet)
-        {
-            for (let i = 0; i < this.matches.length; i++)
+            let longuest = Math.max(tokens.length, this.result.length);
+            for (let index = 0; index < longuest; index++)
             {
-                if (!this.matches[i].equals(other.get(i)))
+                if (index < tokens.length && index < this.result.length)
                 {
-                    return false;
+                    console.log(index, this.result[index], tokens[index].getType(), ln(tokens[index].getValue()));
+                } else if (index < tokens.length) {
+                    console.log(index, 'null', tokens[index].getType(), ln(tokens[index].getValue()));
+                } else if (index < this.result.length) {
+                    console.log(index, this.result[index], 'null');
                 }
             }
-            return true;
+            throw new Error(`Error: expected ${this.result.length} tokens and got ${tokens.length}`);
         }
-        else
+        for (const [index, r] of this.result.entries())
         {
-            this.length = this.size();
-            return super.equals(other);
-        }
-    }
-
-    reduce(length=null, level=0, debug=false) // level & debug not used
-    {
-        //console.log('xxx', this.last().constructor.name);
-        if (length === null)
-        {
-            this.last().length = this.last().elementx.getMin();
-        }
-        else
-        {
-            this.last().length -= length;
-            if (this.last().length < this.last().elementx.getMin())
+            if (tokens[index].getType() !== r)
             {
-                throw new Error("Illogical match: can't be reduced lower than element min.");
+                throw new Error(`Error: expected ${r} and got ${tokens[index].getType()} in ${this.text}`);
             }
         }
-    }
-
-    raw_size()
-    {
-        let total = null;
-        for (let m of this.matches)
+        console.log(`[SUCCESS] Test n°${num} Lang : ${this.lexer.getLanguage()}\nText : |${ln(this.text)}|\nResult:`);
+        for (const tok of tokens)
         {
-            if (m.isMatch())
-            {
-                if (total === null)
-                {
-                    total = 0;
-                }
-                total += m.size();
-            }
+            console.log(tok);
         }
-        return total;
-    }
-
-    // Pas de surchage de length en JavaScript
-    size()
-    {
-        if (!this.match && !this.partial)
-        {
-            return null;
-        }
-        return this.raw_size();
-    }
-
-    toString()
-    {
-        if (this.match || this.partial)
-        {
-            let res = this.match ? 'matched' : 'partial';
-            return '<MatchSet(' + this.matches.length + ') ' + res + ' |' + w(this.getMatched()) + '| #' + this.size() + ' ' + this.getPositionString() + '>';
-        }
-        else
-        {
-            return '<MatchSet(0) none>';
-        }
-    }
-
-    getNbElementMatched()
-    {
-        return this.matches.length;
-    }
-
-    get(index)
-    {
-        if (index < 0 || index >= this.matches.length)
-        {
-            throw "Out of range index: " + index + " should be between 0 and inferior to " + this.matches.length;
-        }
-        return this.matches[index];
-    }
-
-    getMatched()
-    {
-        if (!this.match && !this.partial)
-        {
-            return '';
-        }
-        let total = '';
-        for (let m of this.matches)
-        {
-            total += m.getMatched();
-        }
-        return total;
     }
 }
 
-// On abandonne le concept de Overload (ce qui reste après le match)
+//-------------------------------------------------------------------------------
+// Globals and constants
+//-------------------------------------------------------------------------------
 
-export {Regex, Group, Class, Special, Match, MatchSet, w, assert};
+// Shared definitions
+//var WRONG_INT    = ['[123456789]#*@&*', '0[aAbCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWyYzZ]#*@&*', '00#*@&*'];
+//var INTEGER_SEP  = ['#+[#_]*#+'];
+
+const PATTERNS = {
+    'IDENTIFIER'    : ['[a-zA-Z]\\w*'],
+    'INTEGER'       : ['\\d+'],
+    'INTEGER_HEXA'  : ['0[xX][\\dABCDEFabcdef]+'],
+    'INTEGER_BIN'   : ['0[bB][01]+'],
+    'WRONG_INTEGER' : ['\\d+\\w+'],
+    'FLOAT'         : ['\\d+\\.\\d+', '\\d+[eE]-\\d+', '\\d+\\.\\d+[eE]-?\\d+'],
+    'WRONG_FLOAT'   : ['\\d+\\.'],
+    'BLANKS'        : ['[ \\t]+'],
+    'NEWLINES'      : ['\n', '\n\r', '\r\n'],
+    'OPERATORS'     : ['==', '=', '\\.'],
+    'STRINGS'       : ["'([^\\\\]|\\\\['nt])*'", '"([^\\\\]|\\\\["nt])*"'],
+    'SEPARATORS'    : ['\\(', '\\)']
+};
+
+const LANGUAGES = {
+    'ash': new Language('ash',
+        {
+            'keyword' : ['if', 'then', 'elif', 'else', 'end',
+                'while', 'do', 'for',
+                'break', 'next', 'return',
+                'var', 'fun', 'sub', 'get', 'set', 'class',
+                'import', 'from', 'as',
+                'try', 'catch', 'finally', 'raise', 'const'],
+            'identifier' : PATTERNS["IDENTIFIER"],
+            // Old
+            'affectation' : ['='],
+            'combined_affectation' : ['\\+=', '-=', '\\*=', '/=', '//=', '\\*\\*=', '%='],
+            'type' : [':', '->'],
+            'fast' : ['=>'],
+            'label' : ['::'],
+            // 'unary_operator' : ['-', 'not', r'\#', '~'],
+            // New
+            'integer' : PATTERNS["INTEGER"].concat(PATTERNS["INTEGER_BIN"]).concat(PATTERNS["INTEGER_HEXA"]),
+            'number' : PATTERNS["FLOAT"],
+            'boolean' : ['false', 'true'],
+            'nil': ['nil'],
+            // 'binary_operator' : ['and', 'or', # boolean
+            'operator' : ['-', 'not', '#', '~', 'and', 'or', // boolean
+                'in', // belongs to
+                '\\+', '-', '\\*', '/', '//', '\\*\\*', '%', // mathematical
+                '&', '\\|', '~', '>>', '<<', // bitwise
+                '<', '<=', '>', '>=', '==', '!=', // comparison
+                '\\.'], // call
+            'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
+            'wrong_int' : PATTERNS["WRONG_INTEGER"],
+            'blank': PATTERNS["BLANKS"],
+            'newline' : PATTERNS["NEWLINES"],
+            'comment': ['--[^\n]*(\n|$)'],
+            'string' : PATTERNS["STRINGS"],
+        },
+        ['wrong_int'],
+        // Special
+        {
+            'ante_identifier': ['var', 'const', 'function', 'procedure', 'fun', 'pro', 'class', 'module'],
+        }
+    ),
+    'bnf': new Language('bnf',
+        {
+            'keyword': ['<[\\w- ]+>'],  // non-terminal
+            'identifier': ['expansion', 'A', 'B', 'C', 'D', 'nom'], // expansion
+            'operator': ['::=', '\\|', '\\.\\.\\.', '=', '-', '\\?', '\\*', '\\+', '@', '\\$', '_'],
+            'separator': ['\\(', '\\)', '\\[', '\\]', '\\{', '\\}', ',', ';'],
+            'string' : ['"[\\w- <>:=,;\\|\']*"', "'[\\w- <>:=,;\\|\"]*'"], // terminal
+            'blank': PATTERNS['BLANKS'],
+            'comment': ['#[^\n]*\n'],
+            'newline' : PATTERNS['NEWLINES'],
+        }
+    ),
+    'bnf-mini': new Language('bnf-mini',
+        {
+            'keyword': ['<[\\w- ]+>'],   // non-terminal
+            'string' : PATTERNS['STRINGS'], // terminal
+            'operator': ['::=', '\\|'],    // affect and choice
+            'blank': PATTERNS['BLANKS'],
+            'newline' : PATTERNS['NEWLINES'],
+            'comment': ['\\#.*'],
+        }
+    ),
+    'fr': new Language('fr',
+        {
+            'word': ['[a-zA-ZéàèùâêîôûëïüÿçœæÉÀÈÙÂÊÎÔÛËÏÜŸÇŒÆ]+'],
+            'punct': [',', '\\.', ':', ';', '-', '\\(', '\\)', '!', '\\?', "'", '"'],
+            'blank': [' ', '\n', '\t']
+        }
+    ),
+    'game': new Language('game',
+        {
+            'number': ['\\d+'],
+            'normal': ['\\w[\\w\'-]*'], // Total Annihilation => 2 tokens, Baldur's => 1, Half-life => 1
+            'blank': PATTERNS['BLANKS'],
+            'wrong_int' : PATTERNS['WRONG_INTEGER'],
+            'newline' : ['\n'],
+            'operator': [':'] // FarCry:
+        }
+    ),
+    'hamill' : new Language('hamill',
+        {
+            'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
+            'identifier' : PATTERNS["IDENTIFIER"],
+            'integer' : PATTERNS["INTEGER"],
+            'boolean' : ['true', 'false'],
+            'nil': [],
+            'operator': [':'],
+            'separator' : ['\\{', '\\}', '#', '\\.'],
+            'wrong_int' : PATTERNS["WRONG_INTEGER"],
+            'blank': PATTERNS["BLANKS"],
+            'newline' : PATTERNS["NEWLINES"],
+            'comment': ['§§.*(\n|$)'],
+        },
+        ['wrong_int'],
+        // Special
+        {
+            'ante_identifier': ['var', 'const'],
+            'accept_unknown': true,
+            'string_markers': [],
+            'number' : true
+        }
+    ),
+    'json': new Language('json',
+        {
+            'boolean': ['true', 'false'],
+            'identifier' : PATTERNS['IDENTIFIER'],
+            'number' : PATTERNS['INTEGER'].concat(PATTERNS['FLOAT']),
+            'string' : PATTERNS['STRINGS'],
+            'nil': [],
+            'keyword': ['null'],
+            'operator': [],
+            'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ':', "\\."],
+            'comment' : [],
+            'newline' : PATTERNS['NEWLINES'],
+            'blank': PATTERNS['BLANKS'],
+            'wrong_int' : PATTERNS['WRONG_INTEGER'],
+        },
+        ['wrong_int'],
+        // Special
+        {
+            'ante_identifier': [],
+        }
+    ),
+    // Un langage qui divise simplement en lignes
+    'line': new Language('line',
+        {
+            'line': ['.*(\n|$)']
+        }
+    ),
+    'lua': new Language('lua',
+        {
+            'keyword': ['and', 'break', 'do', 'else', 'elseif', 'end', 'for',
+                        'function', 'goto', 'if', 'in', 'local', 'not', 'or',
+                        'repeat', 'return', 'then', 'until', 'while'],
+            'special': ['ipairs', 'pairs', '\\?', 'print'], // ? is here for demonstration only */
+            'boolean': ['true', 'false'],
+            'nil' : ['nil'],
+            'identifier' : PATTERNS['IDENTIFIER'],
+            'number' : ['\\d+', '\\d+\\.\\d+'],
+            'string' : PATTERNS['STRINGS'],
+            'operator': ['==', '~=', '<', '<=', '>', '>=',
+                         '=',
+                         '\\+', '\\*', '-', '/', '%', '\\^',
+                         '&', '\\|', '~', '>>', '<<',
+                         '\\.', '\\.\\.',
+                         '#', ':'],
+            'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
+            'comment': ['--(?!\\[\\[).*(\n|$)', '--\\[\\[[\\s\\S]*--\\]\\](\n|$)'],
+            'intermediate_comment': ['--\\[\\[[\\s\\S]*'],
+            'newline' : PATTERNS['NEWLINES'],
+            'blank': PATTERNS['BLANKS'],
+            'wrong_int' : PATTERNS['WRONG_INTEGER'],
+        },
+        ['wrong_integer'],
+        {
+            'ante_identifier': ['function'],
+        }
+    ),
+    'python': new Language('python',
+        {
+            'keyword' : ['await', 'else', 'import', 'pass', 'break', 'except', 'in',
+                     'raise', 'class', 'finally', 'is', 'return', 'and', 'for',
+                     'continue', 'lambda', 'try', 'as', 'def', 'from', 'while',
+                     'nonlocal', 'assert', 'del', 'global', 'not', 'with', 'if',
+                     'async', 'elif', 'or', 'yield'],
+            'special': ['print'],
+            'identifier' : PATTERNS["IDENTIFIER"],
+            'integer' : PATTERNS["INTEGER"].concat(PATTERNS["INTEGER_HEXA"]).concat(PATTERNS["INTEGER_BIN"]),
+            'float' : PATTERNS["FLOAT"],
+            'boolean' : ['True', 'False'],
+            'string' : PATTERNS["STRINGS"],
+            'nil': ['None'],
+            'operator': ['\\+', '/', '//', '&', '\\^', '~', '\\|', '\\*\\*', '<<', '%', '\\*',
+                      '-', '>>', ':', '<', '<=', '==', '!=', '>=', '>', '\\+=',
+                      '&=', '/=', '<<=', '%=', '\\*=', '\\|=', '\\*\\*=', '>>=', '-=',
+                      '/=', '\\^=', '\\.', '='],
+            'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
+            'comment': ['#[^\n]*(\n|$)'],
+            'newline' : PATTERNS["NEWLINES"],
+            'blank': PATTERNS["BLANKS"],
+            'wrong_int' : PATTERNS["WRONG_INTEGER"],
+        },
+        ['wrong_int'],
+        // Special
+        {
+            'ante_identifier': ['def', 'class'],
+        }
+    ),
+    'test': new Language('test',
+        {
+            'keyword': ['if', 'then', 'end'],
+            'identifier': PATTERNS['IDENTIFIER'],
+            'integer': PATTERNS['INTEGER'].concat(PATTERNS['INTEGER_HEXA']),
+            'wrong_integer': PATTERNS['WRONG_INTEGER'],
+            'float': PATTERNS['FLOAT'],
+            //'wrong_float': WRONG_FLOAT,
+            'blank': PATTERNS['BLANKS'],
+            'newline': PATTERNS['NEWLINES'],
+            'operators': PATTERNS['OPERATORS'],
+            'separators': PATTERNS['SEPARATORS'],
+            'strings': PATTERNS['STRINGS']
+        },
+        ['wrong_integer']), //, 'wrong_float']);
+    'text': new Language('text', {
+        'normal': ['[^ \\t]*'],
+        'blank': PATTERNS['BLANKS'],
+        'newline': PATTERNS['NEWLINES'],
+        }),
+}
+
+const LEXERS = {
+    'ash': new Lexer(LANGUAGES['ash'], ['blank']),
+    'bnf': new Lexer(LANGUAGES['bnf'], ['blank']),
+    'bnf-mini': new Lexer(LANGUAGES['bnf-mini'], ['blank']),
+    'fr': new Lexer(LANGUAGES['fr'], ['blank']),
+    'game': new Lexer(LANGUAGES['game'], ['blank', 'newline']),
+    'hamill': new Lexer(LANGUAGES['hamill'], ['blank']),
+    'json': new Lexer(LANGUAGES['json'], ['blank', 'newline']),
+    'line': new Lexer(LANGUAGES['line']),
+    'lua': new Lexer(LANGUAGES['lua'], ['blank']),
+    'python': new Lexer(LANGUAGES['python']),
+    'text': new Lexer(LANGUAGES['text'], ['blank'])
+}
+
+const TESTS = [
+    new Test(LEXERS['line'], "bonjour\ntoi qui\nvient de loin", ['line', 'line', 'line']),
+    new Test(LEXERS['fr'], "bonjour l'ami !", ['word', 'word', 'punct', 'word', 'punct']),
+    new Test(LEXERS['text'], "je suis là", ['normal', 'normal', 'normal']),
+    new Test(LEXERS['game'], "Baldur's Gate\nTotal Annihilation\nHalf-Life\nFar Cry: Blood Dragon",
+             ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'operator', 'normal', 'normal']),
+    new Test(LEXERS['json'], "{'alpharius': 20, 'heretic': true}",
+             ['separator', 'string', 'separator', 'number', 'separator', 'string', 'separator', 'boolean', 'separator']),
+    new Test(LEXERS['bnf'], "<rule 1> ::= 'terminal1' 'terminal2'",
+             ['keyword', 'operator', 'string', 'string']),
+    new Test(LEXERS['bnf-mini'], "<rule xtrem> ::= 'terminal xtrem'", ['keyword', 'operator', 'string']),
+    new Test(LEXERS['python'], "def a():\n\tif a == 5:\n\t\tprint('hello')",
+             ['keyword', 'blank', 'identifier', 'separator', 'separator', 'operator', 'newline',
+              'blank', 'keyword', 'blank', 'identifier', 'blank', 'operator', 'blank', 'integer', 'operator', 'newline',
+              'blank', 'special', 'separator', 'string', 'separator']),
+    new Test(LEXERS['ash'], "a ** 5", ['identifier', 'operator', 'integer']),
+    new Test(LEXERS['hamill'], "§§ ceci est un commentaire\n§§ ceci est un autre", ['comment', 'comment']),
+    new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),
+    new Test(LEXERS['lua'], 'a = 5', ['identifier', 'operator', 'number']),
+    new Test(LEXERS['lua'], 't = { ["k1"] = 5 }', ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator']),
+    new Test(LEXERS['lua'], 't = { ["k1"] = 5, ["k2"] = "v", [4] = 6 } -- Définition\nprint(t["k1"]) -- Accès\nprint(t.k1) -- Accès avec sucre syntaxique',
+            ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator',
+             'separator', 'string', 'separator', 'operator', 'string', 'separator', 'separator', 'number', 'separator', 'operator', 'number',
+             'separator', 'comment', 'special', 'separator', 'identifier', 'separator', 'string', 'separator', 'separator', 'comment',
+             'special', 'separator', 'identifier', 'operator', 'identifier', 'separator', 'comment']),
+    new Test(LEXERS['lua'], '--[[Ceci est un\nz--]]', ['comment']),
+    new Test(LEXERS['lua'], '--[[Ceci est un\ncommentaire multiligne--]]', ['comment'])
+]
+
+//const TESTS2 = [new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),]
+
+function tests(debug=false)
+{
+    const text = "if a == 5 then\nprintln('hello')\nend\nendly = 5\na = 2.5\nb = 0xAE\nc = 2.5.to_i()\nd = 2.to_s()\n"; //5A";
+    //const text = "if a == 5";
+    let lexer = new Lexer(LANGUAGES['test'], ['blank']);
+    let tokens = lexer.lex(text);
+    console.log('Text:', text);
+    for (const [index, tok] of tokens.entries())
+    {
+        console.log(`${index.toString().padStart(4)}  ` + tok.toString());
+    }
+
+    for (const [index, t] of TESTS.entries())
+    {
+        t.test(index + 1, debug);
+    }
+
+    console.log(LEXERS['lua'].to_html("if a >= 5 then println('hello') end", null, ['blank']));
+}
+
+tests(true);
+
+export {ln, Language, Token, Lexer, LANGUAGES, PATTERNS, LEXERS};
