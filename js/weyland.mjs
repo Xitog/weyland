@@ -279,6 +279,8 @@ class Lexer
             }
         } else if (word.length > 0)
         {
+            console.log(tokens);
+            console.log(word.charCodeAt(0));
             throw new Error(`Text not lexed at the end: ${word}`);
         }
         return tokens;
@@ -377,7 +379,7 @@ const PATTERNS = {
     'WRONG_INTEGER' : ['\\d+\\w+'],
     'FLOAT'         : ['\\d+\\.\\d+', '\\d+[eE]-\\d+', '\\d+\\.\\d+[eE]-?\\d+'],
     'WRONG_FLOAT'   : ['\\d+\\.'],
-    'BLANKS'        : ['[ \\t]+'],
+    'BLANKS'        : ['[ \u00A0\\t]+'],
     'NEWLINES'      : ['\n', '\n\r', '\r\n'],
     'OPERATORS'     : ['==', '=', '\\.'],
     'STRINGS'       : ["'([^\\\\]|\\\\['nt])*'", '"([^\\\\]|\\\\["nt])*"'],
@@ -625,7 +627,7 @@ const TESTS = [
              ['keyword', 'blank', 'identifier', 'separator', 'separator', 'operator', 'newline',
               'blank', 'keyword', 'blank', 'identifier', 'blank', 'operator', 'blank', 'integer', 'operator', 'newline',
               'blank', 'special', 'separator', 'string', 'separator']),
-    new Test(LEXERS['ash'], "a ** 5", ['identifier', 'operator', 'integer']),
+
     new Test(LEXERS['hamill'], "§§ ceci est un commentaire\n§§ ceci est un autre", ['comment', 'comment']),
     new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),
     new Test(LEXERS['lua'], 'a = 5', ['identifier', 'operator', 'number']),
@@ -636,7 +638,14 @@ const TESTS = [
              'separator', 'comment', 'special', 'separator', 'identifier', 'separator', 'string', 'separator', 'separator', 'comment',
              'special', 'separator', 'identifier', 'operator', 'identifier', 'separator', 'comment']),
     new Test(LEXERS['lua'], '--[[Ceci est un\nz--]]', ['comment']),
-    new Test(LEXERS['lua'], '--[[Ceci est un\ncommentaire multiligne--]]', ['comment'])
+    new Test(LEXERS['lua'], '--[[Ceci est un\ncommentaire multiligne--]]', ['comment']),
+
+    new Test(LEXERS['ash'], "a ** 5", ['identifier', 'operator', 'integer']),
+    new Test(LEXERS['ash'], 'writeln("hello")', ['identifier', 'separator', 'string', 'separator']),
+    new Test(LEXERS['ash'], 'if a == 5 then\n    writeln("hello")\nend',
+                ['keyword', 'identifier', 'operator', 'integer', 'keyword', 'newline',
+                 'identifier', 'separator', 'string', 'separator', 'newline',
+                 'keyword'])
 ]
 
 //const TESTS2 = [new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),]
@@ -661,6 +670,6 @@ function tests(debug=false)
     console.log(LEXERS['lua'].to_html("if a >= 5 then println('hello') end", null, ['blank']));
 }
 
-tests(true);
+//tests(true);
 
 export {ln, Language, Token, Lexer, LANGUAGES, PATTERNS, LEXERS};
