@@ -134,6 +134,19 @@ class Token
         this.start = start;
     }
 
+    is(value, type=null, start=null)
+    {
+        if (type == null && start == null)
+        {
+            return this.value === value;
+        } else if (start == null)
+        {
+            return this.value === value && this.type === type;
+        } else { // nothing is null
+            return this.value === value && this.type === type && this.start === start;
+        }
+    }
+
     getType()
     {
         return this.type;
