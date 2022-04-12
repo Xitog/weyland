@@ -187,6 +187,13 @@ LANGUAGES = {
                       '-', '>>', ':', '<', '<=', '==', '!=', '>=', '>', '\\+=',
                       '&=', '/=', '<<=', '%=', '\\*=', '\\|=', '\\*\\*=', '>>=', '-=',
                       '/=', '\\^=', '\\.', '='],
+            'separator': ['\\{', '\\}', '\\(', '\\)', '\\[', '\\]', ',', ';'],
+            'comment': ['#.*(\n|$)'],
+            'boolean': ['True', 'False'],
+            'nil' : ['None'],
+            'identifier' : PATTERNS['IDENTIFIER'],
+            'number' : ['\\d+', '\\d+\\.\\d+'],
+            'string' : PATTERNS['STRINGS'],
             'newline' : PATTERNS["NEWLINES"],
             'blank': PATTERNS["BLANKS"],
             'wrong_int' : PATTERNS["WRONG_INTEGER"],
@@ -199,6 +206,22 @@ LANGUAGES = {
             'newline': PATTERNS['NEWLINES'],
         }
     ),
+    'hamill' : Language('hamill',
+        {
+            'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
+            'boolean': ['true', 'false'],
+            'identifier' : PATTERNS['IDENTIFIER'],
+            'integer' : ['\\d+'],
+            'boolean' : ['true', 'false'],
+            'nil': [],
+            'operator': [':'],
+            'separator' : ['{', '}', '\#', '.'],
+            'wrong_int' : WRONG_INT,
+            'blank': PATTERNS['BLANKS'],
+            'newline' : PATTERNS['NEWLINES'],
+            'line_comment': ['§§'],
+        },
+    )
 }
 
 RECOGNIZED_LANGUAGES = LANGUAGES.keys()
