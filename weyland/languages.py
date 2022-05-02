@@ -192,7 +192,8 @@ LANGUAGES = {
             'boolean': ['True', 'False'],
             'nil' : ['None'],
             'identifier' : PATTERNS['IDENTIFIER'],
-            'number' : ['\\d+', '\\d+\\.\\d+'],
+            'float' : ['\\d+\\.\\d+'],
+            'integer': ['\\d+'],
             'string' : PATTERNS['STRINGS'],
             'newline' : PATTERNS["NEWLINES"],
             'blank': PATTERNS["BLANKS"],
@@ -201,7 +202,7 @@ LANGUAGES = {
     ),
     'text': Language('text',
         {
-            'normal': ['[^ \\t]*'],
+            'normal': ['[^\\t\\n]*'],
             'blank': PATTERNS['BLANKS'],
             'newline': PATTERNS['NEWLINES'],
         }

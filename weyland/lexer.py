@@ -186,6 +186,8 @@ class Lexer:
                 val = val.replace('&', '&amp;')
                 val = val.replace('>', '&gt;')
                 val = val.replace('<', '&lt;')
+                val = val.replace('"', '&quot;')
+                val = val.replace("'", '&#x27;')
                 output += f'<span class="{self.lang.get_name()}-{tok.get_type()}">{val}</span>'
         return output
 
