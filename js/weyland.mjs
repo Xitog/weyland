@@ -51,7 +51,7 @@ function ln(s)
 
 class Language
 {
-    constructor(name, definitions, wrong=[], specials={})
+    constructor(name, definitions, wrong=[], specials={}, after=null)
     {
         this.name = name;
         if (typeof definitions !== 'object')
@@ -87,6 +87,7 @@ class Language
         }
         this.specials = specials;
         this.wrong = wrong;
+        this.after = after;
     }
 
     isWrong(type)
@@ -129,6 +130,7 @@ class Token
 {
     constructor(type, value, start)
     {
+        console.log(`Creating {Token} type=${type} value=|${value}| start=${start}`);
         this.type = type;
         this.value = value;
         this.start = start;
@@ -136,15 +138,10 @@ class Token
 
     is(value, type=null, start=null)
     {
-        if (type == null && start == null)
-        {
-            return this.value === value;
-        } else if (start == null)
-        {
-            return this.value === value && this.type === type;
-        } else { // nothing is null
-            return this.value === value && this.type === type && this.start === start;
-        }
+        let ok_value = (value === null ? true : this.value === value);
+        let ok_type  = (type  === null ? true : this.type  === type);
+        let ok_start = (start === null ? true : this.start === start);
+        return ok_value && ok_type && ok_start;
     }
 
     getType()
@@ -162,9 +159,25 @@ class Token
         return this.start;
     }
 
+    info()
+    {
+        return `Token ${this.type.padEnd(20)}  |${(ln(this.value) + '|').padEnd(10)}  #${this.value.length} @${this.getStart()}`;
+    }
+
     toString()
     {
-        return `Token ${this.type.padEnd(20)}  |${(ln(this.value) + '|').padEnd(10)}  #${this.value.length}} @${this.getStart()}`;
+        return `{Token ${this.type}  |${ln(this.value)}|  #${this.value.length} @${this.getStart()}}`;
+    }
+}
+
+class Match
+{
+    constructor(type, elem, start)
+    {
+        console.log(`Creating {Match} type=${type} elem=${elem} start=${start}`);
+        this.type = type;
+        this.elem = elem;
+        this.start = start;
     }
 }
 
@@ -199,7 +212,7 @@ class Lexer
                 if (elem.test(word))
                 {
                     if (debug) console.log('    Match: ' + type + ' : ' + variants + ' => ' + elem.test(word));
-                    matches.push([type, elem, start]);
+                    matches.push(new Match(type, elem, start));
                 }
             }
         }
@@ -219,7 +232,7 @@ class Lexer
             word += text[i];
             if (debug)
             {
-                console.log(i, `|${ln(word)}|`);
+                console.log(start, `${i}. @start |${ln(word)}|`);
             }
             matched = this.match(start, word, debug);
             if (debug && matched.length === 0)
@@ -249,29 +262,29 @@ class Lexer
                     let content =  word.substring(0, word.length-1);
                     if (debug)
                     {
-                        console.log('pour le mot ' + content + ' nous avons :');
+                        console.log(`pour le mot |${content}| nous avons :`);
                         for (let res of old)
                         {
-                            console.log('    ' + res[0] + ' : ' + res[1]);
+                            console.log('    ' + res.type + ' : ' + res.elem + ' @' + res.start);
                         }
                     }
-                    if (this.lang.isWrong(old[0][0]))
+                    if (this.lang.isWrong(old[0].type))
                     {
-                        throw new Error(`A wrong token definition ${old[0][0]} : ${old[0][1]} has been validated by the lexer: ${content}`);
+                        throw new Error(`A wrong token definition ${old[0].type} : ${old[0].elem} has been validated by the lexer: ${content}`);
                     }
-                    if (!discards.includes(old[0][0]))
+                    if (!discards.includes(old[0].type))
                     {
-                        tokens.push(new Token(old[0][0], content, old[0][2]));
+                        tokens.push(new Token(old[0].type, content, old[0].start));
                     }
                     word = '';
                     i -= 1;
-                    start = i;
+                    start = old[0].start + content.length;
                 }
             }
             old = matched;
             matched = [];
         }
-        if (old.length > 0)
+        if (old !== null && old.length > 0)
         {
             let content =  word;
             if (debug)
@@ -279,16 +292,16 @@ class Lexer
                 console.log('pour le mot ' + content + ' nous avons :');
                 for (let res of old)
                 {
-                    console.log('    ' + res[0] + ' : ' + res[1]);
+                    console.log('    ' + res.type + ' : ' + res.start);
                 }
             }
-            if (this.lang.isWrong(old[0][0]))
+            if (this.lang.isWrong(old[0].type))
             {
-                throw new Error(`A wrong token definition ${old[0][0]} : ${old[0][1]} has been validated by the lexer: ${content}`);
+                throw new Error(`A wrong token definition ${old[0].type} : ${old[0].elem} has been validated by the lexer: ${content}`);
             }
-            if (!discards.includes(old[0][0]))
+            if (!discards.includes(old[0].type))
             {
-                tokens.push(new Token(old[0][0], content, old[0][2]));
+                tokens.push(new Token(old[0].type, content, old[0].start));
             }
         } else if (word.length > 0)
         {
@@ -296,10 +309,14 @@ class Lexer
             console.log(word.charCodeAt(0));
             throw new Error(`Text not lexed at the end: ${word}`);
         }
+        if (this.lang.after !== null)
+        {
+            tokens = this.lang.after(tokens);
+        }
         return tokens;
     }
 
-    to_html(text=null, tokens=null, raws=[])
+    to_html(text=null, tokens=null, raws=[], enumerate=false)
     {
         if (text === null && tokens === null)
         {
@@ -311,9 +328,16 @@ class Lexer
         {
             tokens = this.lex(text, []) // don't discard anything, we will produce raws instead
         }
-        let output = '';
         for (const tok of tokens)
         {
+            console.log('to_html', tok);
+        }
+        let output = '';
+        let nb = 0;
+        for (let i = 0; i < tokens.length; i++)
+        {
+            const tok = tokens[i];
+            const next = (i + 1 < tokens.length) ? tokens[i+1] : null;
             if (raws.includes(tok.getType()))
             {
                 output += tok.getValue();
@@ -322,8 +346,40 @@ class Lexer
                 val = val.replace('&', '&amp;');
                 val = val.replace('>', '&gt;');
                 val = val.replace('<', '&lt;');
-                output += `<span class="${this.lang.getName()}-${tok.getType()}">${val}</span>`;
+                output += `<span class="${this.lang.getName()}-${tok.getType()}" title="token n°${nb} : ${tok.getType()}">${val}</span>`;
+                if (enumerate)
+                {
+                    console.log(tok);
+                    if (['integer', 'number', 'identifier', 'boolean'].includes(tok.getType()))
+                    {
+                        if (next != null && ['operator', 'keyword'].includes(next.getType()))
+                        {
+                            output += ' ';
+                        }
+                    }
+                    else if (['keyword'].includes(tok.getType()))
+                    {
+                        if (!(['next', 'break', 'return'].includes(tok.getValue())))
+                        {
+                            output += ' ';
+                        }
+                    }
+                    else if (next != null && ['affectation', 'combined_affectation'].includes(next.getType()))
+                    {
+                            output = ' '  + output + ' ';
+                    }
+                    else if (tok.is(',', 'separator'))
+                    {
+                        output += ' ';
+                    }
+                    else if (tok.is(null, 'operator'))
+                    {
+                        output += ' ';
+                    }
+                    // output += `<sup class='info'>${nb}</sup><span> </span>`;
+                }
             }
+            nb += 1;
         }
         return output;
     }
@@ -347,16 +403,18 @@ class Test
         let tokens = this.lexer.lex(this.text, null, debug);
         if (tokens.length !== this.result.length)
         {
+            console.log('Difference of length, dumping:')
             let longuest = Math.max(tokens.length, this.result.length);
             for (let index = 0; index < longuest; index++)
             {
                 if (index < tokens.length && index < this.result.length)
                 {
-                    console.log(index, this.result[index], tokens[index].getType(), ln(tokens[index].getValue()));
+                    let cmp = (this.result[index] === tokens[index].getType());
+                    console.log(`${index}. ${cmp} Expected=${this.result[index]} vs ${tokens[index].getType()} (${ln(tokens[index].getValue())})`);
                 } else if (index < tokens.length) {
-                    console.log(index, 'null', tokens[index].getType(), ln(tokens[index].getValue()));
+                    console.log(`${index}. Expected=null [null] vs ${tokens[index].getType()}`, ln(tokens[index].getValue()));
                 } else if (index < this.result.length) {
-                    console.log(index, this.result[index], 'null');
+                    console.log(`${index}. Expected=${this.result[index]} vs null`);
                 }
             }
             throw new Error(`Error: expected ${this.result.length} tokens and got ${tokens.length}`);
@@ -395,9 +453,26 @@ const PATTERNS = {
     'BLANKS'        : ['[ \u00A0\\t]+'],
     'NEWLINES'      : ['\n', '\n\r', '\r\n'],
     'OPERATORS'     : ['==', '=', '\\.'],
-    'STRINGS'       : ["'([^\\\\]|\\\\['nt])*'", '"([^\\\\]|\\\\["nt])*"'],
+    'STRINGS'       : ["'([^\\\\']|\\\\['nt])*'", '"([^\\\\"]|\\\\["nt])*"'],
     'SEPARATORS'    : ['\\(', '\\)']
 };
+
+const SHORTCUTS = {
+    'keyword': 'kw',
+    'special': 'spe',
+    'identifier': 'id',
+    'affectation': 'aff',
+    'combined_affectation': 'aff',
+    'separator': 'sep',
+    'operator': 'op',
+    'comment': 'com',
+
+    'boolean': 'bool',
+    'integer': 'int',
+    'number': 'num',
+    'float': 'flt',
+    'string': 'str',
+}
 
 const LANGUAGES = {
     'ash': new Language('ash',
@@ -408,6 +483,8 @@ const LANGUAGES = {
                 'var', 'fun', 'sub', 'get', 'set', 'class',
                 'import', 'from', 'as',
                 'try', 'catch', 'finally', 'raise', 'const'],
+            'special': ['writeln', 'write'],
+            'boolean' : ['false', 'true'],
             'identifier' : PATTERNS["IDENTIFIER"],
             // Old
             'affectation' : ['='],
@@ -419,7 +496,6 @@ const LANGUAGES = {
             // New
             'integer' : PATTERNS["INTEGER"].concat(PATTERNS["INTEGER_BIN"]).concat(PATTERNS["INTEGER_HEXA"]),
             'number' : PATTERNS["FLOAT"],
-            'boolean' : ['false', 'true'],
             'nil': ['nil'],
             // 'binary_operator' : ['and', 'or', # boolean
             'operator' : ['-', 'not', '#', '~', 'and', 'or', // boolean
@@ -432,7 +508,7 @@ const LANGUAGES = {
             'wrong_int' : PATTERNS["WRONG_INTEGER"],
             'blank': PATTERNS["BLANKS"],
             'newline' : PATTERNS["NEWLINES"],
-            'comment': ['--[^\n]*(\n|$)'],
+            'comment': ['--[^\n]*'],
             'string' : PATTERNS["STRINGS"],
         },
         ['wrong_int'],
@@ -483,26 +559,79 @@ const LANGUAGES = {
     'hamill' : new Language('hamill',
         {
             'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
-            'identifier' : PATTERNS["IDENTIFIER"],
-            'integer' : PATTERNS["INTEGER"],
-            'boolean' : ['true', 'false'],
-            'nil': [],
-            'operator': [':'],
-            'separator' : ['\\{', '\\}', '#', '\\.'],
-            'wrong_int' : PATTERNS["WRONG_INTEGER"],
-            'blank': PATTERNS["BLANKS"],
             'newline' : PATTERNS["NEWLINES"],
             'comment': ['§§.*(\n|$)'],
+            'bold': ['\\*\\*'],
+            'italic': ["''"],
+            'special': ['\\*', "'"],
+            'normal': ["([^\\\\*'§\n]|\\\\\\*\\*|\\\\\\*|\\\\''|\\\\')+"]
         },
         ['wrong_int'],
         // Special
         {
             'ante_identifier': ['var', 'const'],
-            'accept_unknown': true,
             'string_markers': [],
-            'number' : true
+        },
+        function(tokens)
+        {
+            let res = [];
+            // Première passe, fusion des speciaux
+            for (const [index, tok] of tokens.entries())
+            {
+                if (tok.getType() === 'special')
+                {
+                    if (index > 0 && res.length > 0 && res[res.length - 1].getType() === 'normal')
+                    {
+                        res[res.length - 1].value += tok.getValue();
+                    }
+                    else if (index + 1 < tokens.length && tokens[index + 1].getType() === 'normal')
+                    {
+                        tokens[index + 1].value = tok.getValue() + tokens[index + 1].value;
+                        tokens[index + 1].start -= tok.getValue().length;
+                    }
+                } else {
+                    res.push(tok);
+                }
+            }
+            // Seconde passe, fusion des normaux
+            let res2 = [];
+            let index = 0;
+            while (index < res.length)
+            {
+                let tok = res[index];
+                if (tok.getType() === 'normal')
+                {
+                    let futur = index + 1;
+                    let merged_value = tok.getValue();
+                    while (futur < res.length && res[futur].getType() === 'normal')
+                    {
+                        merged_value += res[futur].getValue();
+                        futur += 1;
+                    }
+                    tok.value = merged_value;
+                    res2.push(tok);
+                    index = futur;
+                }
+                else
+                {
+                    res2.push(tok);
+                    index+=1;
+                }
+            }
+            return res2;
         }
     ),
+
+            /*'bold': '[^\\]\*\*',
+        'italic': "[^\\]''",
+        'underline': '[^\\]__',
+        'sup': '[^\\]^^',
+        'sub': '[^\\]%%',
+        'stroke': '[^\\]--',
+        'code': '[^\\]@@',
+        'link_start': '[^\\]\[\[',
+        'link_end': '[^\\]\]\]',*/
+
     'json': new Language('json',
         {
             'boolean': ['true', 'false'],
@@ -622,7 +751,8 @@ const LEXERS = {
     'line': new Lexer(LANGUAGES['line']),
     'lua': new Lexer(LANGUAGES['lua'], ['blank']),
     'python': new Lexer(LANGUAGES['python']),
-    'text': new Lexer(LANGUAGES['text'], ['blank'])
+    'text': new Lexer(LANGUAGES['text'], ['blank']),
+    'hamill': new Lexer(LANGUAGES['hamill']) //, ['blank'])
 }
 
 const TESTS = [
@@ -654,19 +784,19 @@ const TESTS = [
     new Test(LEXERS['lua'], '--[[Ceci est un\ncommentaire multiligne--]]', ['comment']),
 
     new Test(LEXERS['ash'], "a ** 5", ['identifier', 'operator', 'integer']),
-    new Test(LEXERS['ash'], 'writeln("hello")', ['identifier', 'separator', 'string', 'separator']),
+    new Test(LEXERS['ash'], 'writeln("hello")', ['special', 'separator', 'string', 'separator']),
     new Test(LEXERS['ash'], 'if a == 5 then\n    writeln("hello")\nend',
                 ['keyword', 'identifier', 'operator', 'integer', 'keyword', 'newline',
-                 'identifier', 'separator', 'string', 'separator', 'newline',
-                 'keyword'])
-]
+                 'special', 'separator', 'string', 'separator', 'newline',
+                 'keyword']),
 
-//const TESTS2 = [new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),]
+    new Test(LEXERS['hamill'], "**bold * \\** text**", ['bold', 'normal', 'bold']),
+    new Test(LEXERS['hamill'], "**bold ''text''**", ['bold', 'normal', 'italic', 'normal', 'italic', 'bold']),
+]
 
 function tests(debug=false)
 {
     const text = "if a == 5 then\nprintln('hello')\nend\nendly = 5\na = 2.5\nb = 0xAE\nc = 2.5.to_i()\nd = 2.to_s()\n"; //5A";
-    //const text = "if a == 5";
     let lexer = new Lexer(LANGUAGES['test'], ['blank']);
     let tokens = lexer.lex(text);
     console.log('Text:', text);
@@ -683,6 +813,6 @@ function tests(debug=false)
     console.log(LEXERS['lua'].to_html("if a >= 5 then println('hello') end", null, ['blank']));
 }
 
-//tests(true);
+tests(true);
 
 export {ln, Language, Token, Lexer, LANGUAGES, PATTERNS, LEXERS};
