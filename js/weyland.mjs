@@ -42,7 +42,7 @@
 
 function ln(s)
 {
-    return s.replace('\n', '<NL>');
+    return s.replace(/\n/g, '<NL>');
 }
 
 //-------------------------------------------------------------------------------
@@ -130,7 +130,10 @@ class Token
 {
     constructor(type, value, start)
     {
-        console.log(`Creating {Token} type=${type} value=|${value}| start=${start}`);
+        if (DEBUG)
+        {
+            console.log(`Creating {Token} type=${type} value=|${value}| start=${start}`);
+        }
         this.type = type;
         this.value = value;
         this.start = start;
@@ -174,7 +177,10 @@ class Match
 {
     constructor(type, elem, start)
     {
-        console.log(`Creating {Match} type=${type} elem=${elem} start=${start}`);
+        if (DEBUG)
+        {
+            console.log(`Creating {Match} type=${type} elem=${elem} start=${start}`);
+        }
         this.type = type;
         this.elem = elem;
         this.start = start;
@@ -201,17 +207,17 @@ class Lexer
         return this.lang;
     }
 
-    match(start, word, debug=false)
+    match(start, word)
     {
         let matches = [];
         for (const [type, variants] of this.lang.getTypeDefinitions())
         {
             for (let elem of variants)
             {
-                //if (debug) console.log(ln(word), 'vs', elem, '=', elem.test(word));
+                //if (DEBUG) console.log(ln(word), 'vs', elem, '=', elem.test(word));
                 if (elem.test(word))
                 {
-                    if (debug) console.log('    Match: ' + type + ' : ' + variants + ' => ' + elem.test(word));
+                    if (DEBUG) console.log('    Match: ' + type + ' : ' + variants + ' => ' + elem.test(word));
                     matches.push(new Match(type, elem, start));
                 }
             }
@@ -219,7 +225,7 @@ class Lexer
         return matches;
     }
 
-    lex(text, discards=null, debug=false)
+    lex(text, discards=null)
     {
         discards = discards === null ? this.discards : discards;
         let word = '';
@@ -230,12 +236,12 @@ class Lexer
         for (let i = 0; i < text.length; i++)
         {
             word += text[i];
-            if (debug)
+            if (DEBUG)
             {
                 console.log(start, `${i}. @start |${ln(word)}|`);
             }
-            matched = this.match(start, word, debug);
-            if (debug && matched.length === 0)
+            matched = this.match(start, word);
+            if (DEBUG && matched.length === 0)
             {
                 console.log('    no match this turn');
             }
@@ -250,8 +256,8 @@ class Lexer
                 {
                     let future_index = i + 1;
                     let future_word = word + text[future_index];
-                    matched = this.match(start, future_word, debug);
-                    if (debug && matched.length > 0)
+                    matched = this.match(start, future_word);
+                    if (DEBUG && matched.length > 0)
                     {
                         console.log('    vision of the future OK');
                     }
@@ -260,7 +266,7 @@ class Lexer
                 if (matched.length === 0)
                 {
                     let content =  word.substring(0, word.length-1);
-                    if (debug)
+                    if (DEBUG)
                     {
                         console.log(`pour le mot |${content}| nous avons :`);
                         for (let res of old)
@@ -287,7 +293,7 @@ class Lexer
         if (old !== null && old.length > 0)
         {
             let content =  word;
-            if (debug)
+            if (DEBUG)
             {
                 console.log('pour le mot ' + content + ' nous avons :');
                 for (let res of old)
@@ -328,9 +334,12 @@ class Lexer
         {
             tokens = this.lex(text, []) // don't discard anything, we will produce raws instead
         }
-        for (const tok of tokens)
+        if (DEBUG)
         {
-            console.log('to_html', tok);
+            for (const tok of tokens)
+            {
+                console.log('    to_html', tok);
+            }
         }
         let output = '';
         let nb = 0;
@@ -398,11 +407,12 @@ class Test
         }
     }
 
-    test(num=0, debug=false)
+    test(num=0)
     {
-        let tokens = this.lexer.lex(this.text, null, debug);
+        let tokens = this.lexer.lex(this.text, null);
         if (tokens.length !== this.result.length)
         {
+            console.log('ERROR\nText: |' + this.text + '|');
             console.log('Difference of length, dumping:')
             let longuest = Math.max(tokens.length, this.result.length);
             for (let index = 0; index < longuest; index++)
@@ -426,10 +436,165 @@ class Test
                 throw new Error(`Error: expected ${r} and got ${tokens[index].getType()} in ${this.text}`);
             }
         }
-        console.log(`[SUCCESS] Test n°${num} Lang : ${this.lexer.getLanguage()}\nText : |${ln(this.text)}|\nResult:`);
+        console.log(`[SUCCESS] Test n°${num} Lang : ${this.lexer.getLanguage()}\n    Text : |${ln(this.text)}|\n    Result:`);
         for (const tok of tokens)
         {
-            console.log(tok);
+            console.log('   ', tok);
+        }
+        console.log();
+    }
+}
+
+
+class Node
+{
+    constructor(content=null)
+    {
+        this.content = content;
+    }
+
+    toString()
+    {
+        if (this.content === null)
+        {
+            return this.constructor.name;
+        } else {
+            return this.constructor.name + " { content: " + this.content + " }";
+        }
+    }
+}
+
+class Text extends Node {}
+class Comment extends Node {}
+class Div extends Node {}
+class Markup extends Node {}
+class RawHTML extends Node {}
+class NewLine extends Node {}
+class EndOfParagraph extends Node {}
+class Title extends Node
+{
+    constructor(content, level)
+    {
+        super(content);
+        this.level = level;
+    }
+}
+class Link extends Node {}
+class HR extends Node {}
+class Include extends Node {}
+class Macro extends Node {}
+class TableSeparator extends Node {}
+class TableHeader extends Node {}
+class TableLineEnd extends Node {}
+class TableLineStart extends Node {}
+
+class Document
+{
+    constructor()
+    {
+        this.constants = {};
+        this.required = [];
+        this.css = [];
+        this.labels = {};
+        this.nodes = [];
+    }
+
+    add_constant(k, v)
+    {
+        this.constants[k] = v;
+    }
+
+    add_required(r)
+    {
+        this.required.push(r);
+    }
+
+    add_css(c)
+    {
+        this.css.push(c);
+    }
+
+    add_label(l, v)
+    {
+        this.labels[l] = v;
+    }
+
+    add_node(n)
+    {
+        this.nodes.push(n);
+    }
+
+    to_html()
+    {
+        let content = "";
+        let first_text = true;
+        let not_processed = 0;
+        let in_table = false;
+        for (const [index, node] of this.nodes.entries())
+        {
+            let next = null;
+            if (index + 1 < this.nodes.length)
+            {
+                next = this.nodes[index + 1];
+            }
+            if (node instanceof Text)
+            {
+                if (first_text && !in_table)
+                {
+                    content += "<p>";
+                    first_text = false;
+                }
+                content += node.content;
+            } else if (node instanceof EndOfParagraph)
+            {
+                if (!in_table)
+                {
+                    content += "</p>\n";
+                    first_text = true;
+                } else {
+                    in_table = false;
+                    content += "\n";
+                }
+            } else if (node instanceof Comment)
+            {
+                // discard
+            } else if (node instanceof HR)
+            {
+                content += "<hr>\n";
+            } else if (node instanceof Title)
+            {
+                content += "<h" + node.level + ">" + node.content + "</h" + node.level + ">\n";
+            } else if (node instanceof TableLineStart)
+            {
+                if (!in_table)
+                {
+                    content += "<table>\n";
+                    in_table = true;
+                }
+                content += "<tr><td>";
+            }
+            else if (node instanceof TableLineEnd)
+            {
+                content += "</td></tr>\n";
+            }
+            else if (node instanceof TableSeparator)
+            {
+                content += "</td><td>";
+            }
+            else {
+                console.log("" + node);
+                not_processed += 1;
+            }
+        }
+        console.log('Not processed:', not_processed, '/', this.nodes.length);
+        return content;
+    }
+
+    info()
+    {
+        for (const [index, node] of this.nodes.entries())
+        {
+            console.log(index, node);
         }
     }
 }
@@ -559,14 +724,40 @@ const LANGUAGES = {
     'hamill' : new Language('hamill',
         {
             'keyword': ['var', 'const', 'include', 'require', 'css', 'html'],
+            'macro': ['\\[=GENDATE\\]'],
             'newline' : PATTERNS["NEWLINES"],
-            'comment': ['§§.*(\n|$)'],
+            'paragraph': ['(\n|\n\r|\r\n){2}'],
+            'comment': ['//.*(\n|$)'],
+            'markup': ['\\{\\{[^\\}]*\\}\\}'],
+            'list': ['^([\t ])*(\\* )+'],
+            'link': ['[ \t]*\\[\\[[^\\]]*\\]\\][ \t]*'],
             'bold': ['\\*\\*'],
+            'special': ['\\\\\\*\\*', '\\*',"'"],
             'italic': ["''"],
-            'special': ['\\*', "'"],
-            'normal': ["([^\\\\*'§\n]|\\\\\\*\\*|\\\\\\*|\\\\''|\\\\')+"]
+            'title': ['#+[^\n\r]*'],
+            'hr': ['---[\n\r]'],
+            'const': ['!const [^\n\r]*'],
+            'var': ['!var [^\n\r]*'],
+            'require': ['!require [^\n\r]*'],
+            'include': ['!include [^\n\r]*'],
+            'css': ['!css [^\n\r]*'],
+            'html': ['!html [^\n\r]*'],
+            'label': ['::[^:\n\r]*::[ \t]*'],
+            'url': ['(https://|http://)[\\w\\./#]*'],
+            'url_wrong': ['(https:|http:)'],
+            'table_header_line': ['\\|-+\\|'],
+            //'table_line': ['\\|[^\n\r]\\|'],
+            //'normal': ["([^\\\\*'/\n\r]|\\\\\\*\\*|\\\\\\*|\\\\''|\\\\')+"], //|\\::|\\:)+"],
+            'table': ['\\|'],
+            'table_header_wrong': ['\\|-+'],
+            'normal': ["[^\n\r\\*'\\|\\{\\[:]*"]
         },
-        ['wrong_int'],
+        // Nous avons besoin de "sustainers". Des définitions de tokens qui vont permettre d'atteindre le bon token.
+        // Sinon https: s'arrêterait au ":" il ferait un <normal, https> puisque https: ne correspond à rien,
+        // ni le "futur", càd https:/ Il faut au moins deux / pour embrayer sur la définition url.
+        // On a pas ça avec les tokens d'un langage de prog. Ils se contiennent eux-mêmes :
+        // i sera valide en id, même s'il fait partir de if plus tard.
+        ['table_header_wrong', 'url_wrong'],
         // Special
         {
             'ante_identifier': ['var', 'const'],
@@ -575,10 +766,10 @@ const LANGUAGES = {
         function(tokens)
         {
             let res = [];
-            // Première passe, fusion des speciaux
+            // Première passe, fusion des speciaux / liste
             for (const [index, tok] of tokens.entries())
             {
-                if (tok.getType() === 'special')
+                if (tok.getType() === 'special' || (tok.getType() === 'list' && index > 0 && !['newline', 'table'].includes(tokens[index-1].getType())))
                 {
                     if (index > 0 && res.length > 0 && res[res.length - 1].getType() === 'normal')
                     {
@@ -618,7 +809,56 @@ const LANGUAGES = {
                     index+=1;
                 }
             }
-            return res2;
+            // Troisième passe détermination des table avec newline/paragraph
+            let res3 = [];
+            index = 0;
+            while (index < res2.length)
+            {
+                let tok = res2[index];
+                let next = null;
+                if (index + 1 < res2.length)
+                {
+                    next = res2[index + 1];
+                }
+                let nextnext = null;
+                if (index + 1 < res2.length)
+                {
+                    nextnext = res2[index + 2];
+                }
+                if (index === 0 && tok.getType() === 'table')
+                {
+                    // On ne pousse pas le token courrant, table remplacé par TableLineStart
+                    res3.push(new Token('TableLineStart', '', tok.getStart()));
+                }
+                else if (index === res.length - 1 && tok.getType()  === 'table')
+                {
+                     // On ne pousse pas le token courrant, table remplacé par TableLineEnd
+                     res3.push(new Token('TableLineEnd', '', tok.getStart()));
+                }
+                else if (tok.getType() === 'table' && next !== null && next.getType() === 'newline' && nextnext !== null && nextnext.getType() === 'table')
+                {
+                    res3.push(new Token('TableLineEnd', '', tok.getStart()));
+                    res3.push(new Token('TableLineStart', '', nextnext.getStart()));
+                    index += 2;
+                }
+                else if (['paragraph', 'newline'].includes(tok.getType()) && next !== null && next.getType() === 'table')
+                {
+                    // On pousse le token courant
+                    res3.push(tok);
+                    // Met on remplace le token suivant par :
+                    res3.push(new Token('TableLineStart', '', next.getStart()));
+                    // On saute l'ancien
+                    index += 1;
+                } else if (tok.getType() === 'table' && next !== null && ['paragraph', 'newline'].includes(next.getType()))
+                {
+                    // On ne pousse pas le token courrant, table remplacé par TableLineEnd
+                    res3.push(new Token('TableLineEnd', '', tok.getStart()));
+                } else {
+                    res3.push(tok);
+                }
+                index += 1;
+            }
+            return res3;
         }
     ),
 
@@ -771,7 +1011,6 @@ const TESTS = [
               'blank', 'keyword', 'blank', 'identifier', 'blank', 'operator', 'blank', 'integer', 'operator', 'newline',
               'blank', 'special', 'separator', 'string', 'separator']),
 
-    new Test(LEXERS['hamill'], "§§ ceci est un commentaire\n§§ ceci est un autre", ['comment', 'comment']),
     new Test(LEXERS['lua'], '3+5', ['number', 'operator', 'number']),
     new Test(LEXERS['lua'], 'a = 5', ['identifier', 'operator', 'number']),
     new Test(LEXERS['lua'], 't = { ["k1"] = 5 }', ['identifier', 'operator', 'separator', 'separator', 'string', 'separator', 'operator', 'number', 'separator']),
@@ -790,29 +1029,204 @@ const TESTS = [
                  'special', 'separator', 'string', 'separator', 'newline',
                  'keyword']),
 
+    new Test(LEXERS['hamill'], "// ceci est un commentaire\n// ceci est un autre", ['comment', 'comment']),
     new Test(LEXERS['hamill'], "**bold * \\** text**", ['bold', 'normal', 'bold']),
     new Test(LEXERS['hamill'], "**bold ''text''**", ['bold', 'normal', 'italic', 'normal', 'italic', 'bold']),
+    new Test(LEXERS['hamill'], "* * * **ceci est une liste en gras**", ['list', 'bold', 'normal', 'bold']),
+    new Test(LEXERS['hamill'], "|-----------------------|", ['table_header_line']),
+    new Test(LEXERS['hamill'], "::label:: https://value", ['label', 'url']),
+    new Test(LEXERS['hamill'], "::label:: http://value\ntext", ['label', 'url', 'newline', 'normal']),
+    new Test(LEXERS['hamill'], "|une table avec du **gras**|", ['TableLineStart', 'normal', 'bold', 'normal', 'bold', 'TableLineEnd']),
+    new Test(LEXERS['hamill'], '|| * une continuation de table avec une liste|', ['TableLineStart', 'table', 'list', 'normal', 'TableLineEnd']),
+    new Test(LEXERS['hamill'], '{{pipo}}Damien Gouteux', ['markup', 'normal']),
+    new Test(LEXERS['hamill'], '|ligne 1, col 1|ligne 1, col2|\n|ligne 2, col 1|ligne 2, col2|', ['TableLineStart', 'normal', 'table', 'normal', 'TableLineEnd', 'TableLineStart', 'normal', 'table', 'normal', 'TableLineEnd']),
 ]
 
-function tests(debug=false)
+function tests()
 {
+    /*
     const text = "if a == 5 then\nprintln('hello')\nend\nendly = 5\na = 2.5\nb = 0xAE\nc = 2.5.to_i()\nd = 2.to_s()\n"; //5A";
     let lexer = new Lexer(LANGUAGES['test'], ['blank']);
     let tokens = lexer.lex(text);
-    console.log('Text:', text);
+    console.log('    Text :', text);
     for (const [index, tok] of tokens.entries())
     {
         console.log(`${index.toString().padStart(4)}  ` + tok.toString());
     }
+    */
 
     for (const [index, t] of TESTS.entries())
     {
-        t.test(index + 1, debug);
+        t.test(index + 1);
     }
 
+    console.log('Test to_html:');
     console.log(LEXERS['lua'].to_html("if a >= 5 then println('hello') end", null, ['blank']));
+
+    process_file('index.hml');
 }
 
-tests(true);
+var DEBUG = false;
+tests();
+
+import fs from 'fs';
+
+
+function process_file(name)
+{
+    let data = null;
+    // require is specific to Node.js
+    //const fs = require('fs');
+    let doc = new Document();
+    try
+    {
+        data = fs.readFileSync('index.hml', 'utf8');
+    }
+    catch (err)
+    {
+            console.error(err);
+            return;
+    }
+    const tokens = LEXERS['hamill'].lex(data);
+    let skip_if_paragraph = true;
+    let skip_next = false;
+    for (const [index, tok] of tokens.entries())
+    {
+        // Skipping
+        if (skip_next === true)
+        {
+            skip_next = false;
+            continue;
+        }
+        if (skip_if_paragraph && (tok.getType() === 'paragraph' || tok.getType() === 'newline'))
+        {
+            continue; // Skip ALL the next paragraphs
+        }
+        skip_if_paragraph = false;
+        // Getting the next token
+        let next = null;
+        if (index + 1 < tokens.length)
+        {
+            next = tokens[index + 1];
+        }
+        // Getting the current token's value
+        let value = tok.getValue();
+        // Processing
+        switch(tok.getType())
+        {
+            case 'paragraph':
+                doc.add_node(new EndOfParagraph());
+                skip_if_paragraph = true;
+                break;
+            case 'const':
+                let s = value.replace('!const', '').split('=');
+                let id = s[0].trim();
+                value = s[1].trim();
+                doc.add_constant(id, value);
+                skip_if_paragraph = true;
+                break;
+            case 'require':
+                value = value.replace('!require').trim();
+                doc.add_required(value);
+                skip_if_paragraph = true;
+                break;
+            case 'css':
+                value = value.replace('!css').trim();
+                doc.add_css(value);
+                skip_if_paragraph = true;
+                break;
+            case 'html':
+                doc.add_node(new RawHTML(value));
+                skip_if_paragraph = true;
+                break;
+            case 'markup':
+                if (next !== null && next.getType() === 'paragraph')
+                {
+                    skip_if_paragraph = true;
+                    doc.add_node(new Div(value));
+                }
+                else
+                {
+                    doc.add_node(new Markup(value));
+                }
+                break;
+            case 'label':
+                if (next === null || next.getType() !== 'url')
+                {
+                    throw new Error("Label " + tok + " must be followed by an URL and is followed by: " + next.getType());
+                }
+                let label = value.replace(/::/g, '').trim();
+                let url = next.getValue().trim();
+                doc.add_label(label, url)
+                skip_next = true;
+                skip_if_paragraph = true;
+                break;
+            case 'newline':
+                doc.add_node(new NewLine()); // don't discard for table !
+                skip_if_paragraph = true;
+                break;
+            case 'normal':
+                doc.add_node(new Text(value.trim()));
+                break;
+            case 'comment':
+                doc.add_node(new Comment(value));
+                skip_if_paragraph = true;
+                break;
+            case 'include':
+                let include = value.replace('!include', '').trim();
+                doc.add_node(new Include(include));
+                skip_if_paragraph = true;
+                break;
+            case 'hr':
+                doc.add_node(new HR());
+                skip_if_paragraph = true;
+                break;
+            case 'title':
+                let lvl = 0;
+                for (let i = 0; i < value.length; i++)
+                {
+                    if (value[i] === '#')
+                    {
+                        lvl += 1;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                doc.add_node(new Title(value.substring(lvl+1).trim(), lvl));
+                skip_if_paragraph = true;
+                break;
+            case 'link':
+                value = value.trim()
+                doc.add_node(new Link(value.substring(2, value.length-2)));
+                break;
+            case 'macro':
+                doc.add_node(new Macro(value));
+                break;
+            case 'table':
+                doc.add_node(new TableSeparator());
+                break;
+            case 'table_header_line':
+                doc.add_node(new TableHeader());
+                break;
+            case 'TableLineStart':
+                doc.add_node(new TableLineStart());
+                break;
+            case 'TableLineEnd':
+                doc.add_node(new TableLineEnd());
+                break;
+            default:
+                console.log(index, tok);
+                throw new Error("What to do?");
+        }
+    }
+    doc.info();
+    // Emitting HTML
+    console.log("\n------------------------------------------------------------------------");
+    console.log("TO HTML");
+    console.log("------------------------------------------------------------------------\n");
+    fs.writeFileSync('out.html', doc.to_html());
+}
 
 export {ln, Language, Token, Lexer, LANGUAGES, PATTERNS, LEXERS};
