@@ -486,7 +486,26 @@ class Macro extends Node {}
 class TableSeparator extends Node {}
 class TableHeader extends Node {}
 class TableLineEnd extends Node {}
-class TableLineStart extends Node {}
+class TableLineStart extends Node
+{
+    constructor(header=false)
+    {
+        super(null);
+        this.header = header;
+    }
+
+    toString()
+    {
+        if (this.header)
+        {
+            return 'TableLineStart (header)';
+        }
+        else
+        {
+            return 'TableLineStart';
+        }
+    }
+}
 
 class Document
 {
@@ -524,14 +543,96 @@ class Document
         this.nodes.push(n);
     }
 
-    to_html()
+    get_constant(target, default_value=null)
     {
-        let content = "";
+        if (! (target in this.constants))
+        {
+            if (default_value === null)
+            {
+                for (const label in this.constants)
+                {
+                    console.log(label);
+                }
+                throw new Error("Constant not found : " + target);
+            }
+            else
+            {
+                return default_value;
+            }
+        }
+        return this.constants[target];
+    }
+
+    get_label(target)
+    {
+        if (! (target in this.labels))
+        {
+            for (const label in this.labels)
+            {
+                console.log(label);
+            }
+            throw new Error("Label not found : " + target);
+        }
+        return this.labels[target];
+    }
+
+    make_anchor(text)
+    {
+        return text.toLocaleLowerCase().replace(/ /g, '-');
+    }
+
+    to_html(discard_comment=true)
+    {
+        let start_time = new Date();
+        let content = `<html lang="fr">
+<head>
+  <meta charset=utf-8>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${this.get_constant('TITLE', 'Undefined title')}</title>
+  <link rel="icon" href="https://xitog.github.io/dgx/img/favicon.ico" type="image/x-icon" />
+  <link rel="shortcut icon" href="https://xitog.github.io/dgx/img/favicon.ico" type="image/x-icon" />\n`;
+        // For CSS
+        if (this.required.length > 0)
+        {
+            for (let req of this.required)
+            {
+                if (req.endsWith('.css'))
+                {
+                    content += `  <link href="${req}" rel="stylesheet">\n`;
+                }
+            }
+        }
+        if (this.css.length > 0)
+        {
+            content += '<style type="text/css">\n';
+            for (let cs of this.css)
+            {
+                content += cs + "\n";
+            }
+            content += '</style>\n';
+        }
+        // For javascript
+        if (this.required.length > 0)
+        {
+            for (let req of this.required)
+            {
+                if (req.endsWith('.js'))
+                {
+                    content += `<script src="${req}"></script>\n`;
+                }
+            }
+        }
+        content += "</head>\n";
+        content += "<body>\n";
         let first_text = true;
         let not_processed = 0;
+        let types_not_processed = [];
         let in_table = false;
+        let in_header_line = false;
         for (const [index, node] of this.nodes.entries())
         {
+            //console.log(index, node, first_text);
             let next = null;
             if (index + 1 < this.nodes.length)
             {
@@ -545,56 +646,304 @@ class Document
                     first_text = false;
                 }
                 content += node.content;
-            } else if (node instanceof EndOfParagraph)
+            }
+            else if (node instanceof NewLine)
+            {
+                if (in_table)
+                {
+                    content += "</table>\n";
+                    in_table = false;
+                    content += "\n";
+                }
+            }
+            else if (node instanceof EndOfParagraph)
             {
                 if (!in_table)
                 {
                     content += "</p>\n";
                     first_text = true;
                 } else {
+                    content += "</table>\n";
                     in_table = false;
                     content += "\n";
                 }
-            } else if (node instanceof Comment)
+            }
+            else if (node instanceof Comment)
             {
-                // discard
-            } else if (node instanceof HR)
+                if (!discard_comment)
+                {
+                    content += '<!-- ' + node.content + ' -->\n';
+                }
+            }
+            else if (node instanceof HR)
             {
                 content += "<hr>\n";
             } else if (node instanceof Title)
             {
-                content += "<h" + node.level + ">" + node.content + "</h" + node.level + ">\n";
-            } else if (node instanceof TableLineStart)
+                content += `<h${node.level} id="${this.make_anchor(node.content)}">${node.content}</h${node.level}>\n`;
+            }
+            else if (node instanceof TableLineStart)
             {
-                if (!in_table)
+                if (!first_text)
+                {
+                    content += "</p>\n";
+                }
+                first_text = true;
+                if (in_table && node.header)
+                {
+                    throw new Error("Header line inside a table at " + index);
+                }
+                else if (!in_table)
                 {
                     content += "<table>\n";
                     in_table = true;
+                    if (node.header)
+                    {
+                        in_header_line = true;
+                    }
                 }
-                content += "<tr><td>";
+                if (in_header_line)
+                {
+                    content += '<tr><th>';
+                }
+                else
+                {
+                    content += "<tr><td>";
+                }
             }
             else if (node instanceof TableLineEnd)
             {
-                content += "</td></tr>\n";
+                if (in_header_line)
+                {
+                    content += "</th></tr>\n";
+                    in_header_line = false;
+                }
+                else
+                {
+                    content += "</td></tr>\n";
+                }
             }
             else if (node instanceof TableSeparator)
             {
-                content += "</td><td>";
+                if (in_header_line)
+                {
+                    content += "</th><th>"
+                }
+                else
+                {
+                    content += "</td><td>";
+                }
             }
-            else {
-                console.log("" + node);
+            else if (node instanceof Link)
+            {
+                // [[label]] (you must define somewhere ::label:: https://) display = url
+                // [[https://...]] display = url
+                // [[display->label]] (you must define somewhere ::label:: https://)
+                // [[display->https://...]]
+                let parts = node.content.split('->');
+                let link_display = null;
+                let link_url = null;
+                if (parts.length === 1)
+                {
+                    link_display = parts[0];
+                    if (parts[0].substring(0, 7) === 'http://' || parts[0].substring(0, 8) === 'https://')
+                    {
+                        link_url = parts[0];
+                    }
+                    else
+                    {
+                        link_url = this.get_label(parts[0]);
+                    }
+                }
+                else
+                {
+                    link_display = parts[0];
+                    // HACK
+                    let tokens = LEXERS['hamill'].lex(link_display);
+                    let in_sup = false;
+                    let in_sub = false;
+                    let in_bold = false;
+                    let in_italic = false;
+                    let in_underline = false;
+                    let in_stroke = false;
+                    link_display = '';
+                    for (let tok of tokens)
+                    {
+                        switch (tok.getType())
+                        {
+                            case 'normal':
+                                link_display += tok.getValue();
+                                break;
+                            case 'sup':
+                                if (!in_sup) { link_display += '<sup>'; in_sup = true; }
+                                else { link_display += '</sup>'; in_sup = false; }
+                                break;
+                            case 'sub':
+                                if (!in_sub) { link_display += '<sub>'; in_sub = true; }
+                                else { link_display += '</sub>'; in_sub = false; }
+                                break;
+                            case 'bold':
+                                if (!in_bold) { link_display += '<b>'; in_bold = true; }
+                                else { link_display += '</b>'; in_bold = false; }
+                                break;
+                            case 'italic':
+                                if (!in_italic) { link_display += '<i>'; in_italic = true; }
+                                else { link_display += '</i>'; in_italic = false; }
+                                break;
+                            case 'underline':
+                                if (!in_underline) { link_display += '<u>'; in_underline = true; }
+                                else { link_display += '</u>'; in_underline = false; }
+                                break;
+                            case 'stroke':
+                                if (!in_stroke) { link_display += '<s>'; in_stroke = true; }
+                                else { link_display += '</s>'; in_stroke = false; }
+                                break;
+                            default:
+                                throw new Error("Miniparsing doesn't authorize this kind of token: " + tok);
+                        }
+
+                    }
+                    if (parts[1].substring(0, 7) === 'http://' || parts[1].substring(0, 8) === 'https://')
+                    {
+                        link_url = parts[1];
+                    }
+                    else
+                    {
+                        link_url = this.get_label(parts[1]);
+                    }
+                }
+                content += `<a href="${link_url}">${link_display}</a>`;
+            }
+            else if (node instanceof Div)
+            {
+                let parts = node.content.split(' ');
+                if (parts.length === 1 && parts[0].trim() === 'end')
+                {
+                    content += '</div>\n';
+                    continue;
+                }
+                let div_id = null;
+                let div_class = null;
+                for (let i in parts)
+                {
+                    let p = parts[i];
+                    p = p.trim();
+                    // Reading
+                    if (p.substring(0,1) === '#')
+                    {
+                        div_id = p.substring(1);
+                    }
+                    else if (p.substring(0,1) === '.')
+                    {
+                        div_class = p.substring(1);
+                    }
+                }
+                // Producing
+                if (div_id === null && div_class === null)
+                {
+                    content += "<div>\n";
+                }
+                else if (div_id !== null && div_class === null)
+                {
+                    content += `<div id="${div_id}">\n`;
+                }
+                else if (div_id === null && div_class !== null)
+                {
+                    content += `<div class="${div_class}">\n`;
+                }
+                else
+                {
+                    content += `<div id="${div_id}" class="${div_class}">\n`;
+                }
+            }
+            else if (node instanceof RawHTML)
+            {
+                content += node.content + "\n";
+            }
+            else if (node instanceof Markup)
+            {
+                let klass = null;
+                if (node.content.substring(0,1) === '.')
+                {
+                    if (node.content.indexOf(' ') !== -1)
+                    {
+                        klass = node.content.substring(1, node.content.indexOf(' '));
+                    }
+                    else
+                    {
+                        klass = node.content.substring(1);
+                    }
+                }
+                if (node.content.indexOf(' ') !== -1)
+                {
+                    let text = node.content.substring(klass.length + 2); // +2 because '.' before and ' ' after must be removed
+                    content += `<span class="${klass}">${text}</span>`;
+                }
+                else
+                {
+                    if (!first_text)
+                    {
+                        throw new Error(`Impossible to declare a paragraph with {{.class}} inside a paragraph with ${node} at ${index}`);
+                    }
+                    content += `<p class="${klass}">`;
+                    first_text = false;
+                }
+            }
+            else if (node instanceof Macro)
+            {
+                if (node.content === "[=GENDATE]")
+                {
+                    content += new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                }
+                else
+                {
+                    throw new Error("Macro unknown: " + node.content);
+                }
+            }
+            else if (node instanceof Include)
+            {
+                let file = fs.readFileSync(node.content);
+                content += file + "\n";
+            }
+            else
+            {
+                console.log('Pb : ', index, "" + node, node.constructor.name);
                 not_processed += 1;
+                if (!(node.constructor.name in types_not_processed))
+                {
+                    types_not_processed[node.constructor.name] = 0;
+                }
+                types_not_processed[node.constructor.name] += 1;
             }
         }
-        console.log('Not processed:', not_processed, '/', this.nodes.length);
+        if (in_table)
+        {
+            content += "</table>\n";
+        }
+        if (!first_text)
+        {
+            content += "</p>\n";
+        }
+        content += "</body>";
+        console.log('\nNodes not processed:', not_processed, '/', this.nodes.length, 'types :');
+        for (let [k, v] of Object.entries(types_not_processed))
+        {
+            console.log('   -', k, v);
+        }
+        let end_time = new Date();
+        let elapsed = (end_time - start_time)/1000;
+        console.log('Processed in:        %ds', elapsed, '\n');
         return content;
     }
 
     info()
     {
+        console.log('\n------------------------------------------------------------------------');
+        console.log('Liste des nodes du document');
+        console.log('------------------------------------------------------------------------\n');
         for (const [index, node] of this.nodes.entries())
         {
-            console.log(index, node);
+            console.log(index, node.toString());
         }
     }
 }
@@ -730,10 +1079,12 @@ const LANGUAGES = {
             'comment': ['//.*(\n|$)'],
             'markup': ['\\{\\{[^\\}]*\\}\\}'],
             'list': ['^([\t ])*(\\* )+'],
-            'link': ['[ \t]*\\[\\[[^\\]]*\\]\\][ \t]*'],
+            //'link': ['[ \t]*\\[\\[[^\\]]*\\]\\][ \t]*'],
+            'link': ['\\[\\[[^\\]]*\\]\\]*'],
             'bold': ['\\*\\*'],
-            'special': ['\\\\\\*\\*', '\\*',"'"],
+            'special': ['\\\\\\*\\*', '\\*',"'", '\\^'],
             'italic': ["''"],
+            'sup': ["\\^\\^"],
             'title': ['#+[^\n\r]*'],
             'hr': ['---[\n\r]'],
             'const': ['!const [^\n\r]*'],
@@ -750,7 +1101,7 @@ const LANGUAGES = {
             //'normal': ["([^\\\\*'/\n\r]|\\\\\\*\\*|\\\\\\*|\\\\''|\\\\')+"], //|\\::|\\:)+"],
             'table': ['\\|'],
             'table_header_wrong': ['\\|-+'],
-            'normal': ["[^\n\r\\*'\\|\\{\\[:]*"]
+            'normal': ["[^\n\r\\*'\\|\\{\\[:\\^]*"]
         },
         // Nous avons besoin de "sustainers". Des définitions de tokens qui vont permettre d'atteindre le bon token.
         // Sinon https: s'arrêterait au ":" il ferait un <normal, https> puisque https: ne correspond à rien,
@@ -809,7 +1160,13 @@ const LANGUAGES = {
                     index+=1;
                 }
             }
+            // Dump #1
+            /*for (let [index, tok] of res2.entries())
+            {
+                console.log('dump #1', index, tok);
+            }*/
             // Troisième passe détermination des table avec newline/paragraph
+            // et gestion des TableHeader
             let res3 = [];
             index = 0;
             while (index < res2.length)
@@ -820,44 +1177,66 @@ const LANGUAGES = {
                 {
                     next = res2[index + 1];
                 }
-                let nextnext = null;
-                if (index + 1 < res2.length)
-                {
-                    nextnext = res2[index + 2];
-                }
+                //console.log('>>', index, tok.getType());
+                // Start
                 if (index === 0 && tok.getType() === 'table')
                 {
-                    // On ne pousse pas le token courrant, table remplacé par TableLineStart
-                    res3.push(new Token('TableLineStart', '', tok.getStart()));
+                    // On ne pousse pas le token courrant, table remplacé par table_line_start
+                    res3.push(new Token('table_line_start', '', tok.getStart()));
                 }
+                // End
                 else if (index === res.length - 1 && tok.getType()  === 'table')
                 {
-                     // On ne pousse pas le token courrant, table remplacé par TableLineEnd
-                     res3.push(new Token('TableLineEnd', '', tok.getStart()));
-                }
-                else if (tok.getType() === 'table' && next !== null && next.getType() === 'newline' && nextnext !== null && nextnext.getType() === 'table')
-                {
-                    res3.push(new Token('TableLineEnd', '', tok.getStart()));
-                    res3.push(new Token('TableLineStart', '', nextnext.getStart()));
-                    index += 2;
+                     // On ne pousse pas le token courrant, table remplacé par table_line_end
+                     res3.push(new Token('table_line_end', '', tok.getStart()));
                 }
                 else if (['paragraph', 'newline'].includes(tok.getType()) && next !== null && next.getType() === 'table')
                 {
-                    // On pousse le token courant
-                    res3.push(tok);
-                    // Met on remplace le token suivant par :
-                    res3.push(new Token('TableLineStart', '', next.getStart()));
-                    // On saute l'ancien
+                    if (tok.getType() === 'paragraph')
+                    {
+                        res3.push(new Token('newline', '\n', tok.getStart())); // we left a newline in order to separate TWO TABLE
+                    }
+                    res3.push(new Token('table_line_start', '', next.getStart()));
                     index += 1;
-                } else if (tok.getType() === 'table' && next !== null && ['paragraph', 'newline'].includes(next.getType()))
+                }
+                else if (tok.getType() === 'table' && next !== null && ['paragraph', 'newline'].includes(next.getType()))
                 {
-                    // On ne pousse pas le token courrant, table remplacé par TableLineEnd
-                    res3.push(new Token('TableLineEnd', '', tok.getStart()));
-                } else {
+                    res3.push(new Token('table_line_end', '', next.getStart()));
+                    // We left the newline in order to make the table_line_start
+                }
+                else if (tok.getType() === 'newline' && next !== null && next.getType() === 'table_header_line')
+                {
+                    let sub = res3.length - 1;
+                    let subsub = res3.length - 2;
+                    let found = false;
+                    while (sub >= 0)
+                    {
+                        //console.log('----', 'sub', sub, res3[sub], 'subsub', subsub, res3[subsub]);
+                        if (res3[sub].getType() === 'table_line_start' && (res3[subsub] === undefined || res3[subsub].getType() !== 'table_line_end'))
+                        {
+                            found = true;
+                            break;
+                        }
+                        sub -= 1;
+                        subsub -= 1;
+                    }
+                    if (found)
+                    {
+                        res3[sub].type = 'table_line_header_start';
+                    }
+                    index += 1;
+                }
+                else
+                {
                     res3.push(tok);
                 }
                 index += 1;
             }
+            // Dump #2
+            /*for (let [index, tok] of res3.entries())
+            {
+                console.log('dump #2', index, tok);
+            }*/
             return res3;
         }
     ),
@@ -1036,10 +1415,11 @@ const TESTS = [
     new Test(LEXERS['hamill'], "|-----------------------|", ['table_header_line']),
     new Test(LEXERS['hamill'], "::label:: https://value", ['label', 'url']),
     new Test(LEXERS['hamill'], "::label:: http://value\ntext", ['label', 'url', 'newline', 'normal']),
-    new Test(LEXERS['hamill'], "|une table avec du **gras**|", ['TableLineStart', 'normal', 'bold', 'normal', 'bold', 'TableLineEnd']),
-    new Test(LEXERS['hamill'], '|| * une continuation de table avec une liste|', ['TableLineStart', 'table', 'list', 'normal', 'TableLineEnd']),
+    new Test(LEXERS['hamill'], "|une table avec du **gras**|", ['table_line_start', 'normal', 'bold', 'normal', 'bold', 'table_line_end']),
+    new Test(LEXERS['hamill'], '|| * une continuation de table avec une liste|', ['table_line_start', 'table', 'list', 'normal', 'table_line_end']),
     new Test(LEXERS['hamill'], '{{pipo}}Damien Gouteux', ['markup', 'normal']),
-    new Test(LEXERS['hamill'], '|ligne 1, col 1|ligne 1, col2|\n|ligne 2, col 1|ligne 2, col2|', ['TableLineStart', 'normal', 'table', 'normal', 'TableLineEnd', 'TableLineStart', 'normal', 'table', 'normal', 'TableLineEnd']),
+    new Test(LEXERS['hamill'], '|ligne 1, col 1|ligne 1, col2|\n|ligne 2, col 1|ligne 2, col2|', ['table_line_start', 'normal', 'table', 'normal', 'table_line_end', 'table_line_start', 'normal', 'table', 'normal', 'table_line_end']),
+    new Test(LEXERS['hamill'], '[[bonjour]] le monde', ['link', 'normal']),
 ]
 
 function tests()
@@ -1060,8 +1440,15 @@ function tests()
         t.test(index + 1);
     }
 
-    console.log('Test to_html:');
+    console.log("\n------------------------------------------------------------------------");
+    console.log("Test de to_html");
+    console.log("------------------------------------------------------------------------\n");
+
     console.log(LEXERS['lua'].to_html("if a >= 5 then println('hello') end", null, ['blank']));
+
+    console.log("\n------------------------------------------------------------------------");
+    console.log("Test de process_file (hamill)");
+    console.log("------------------------------------------------------------------------\n");
 
     process_file('index.hml');
 }
@@ -1126,28 +1513,28 @@ function process_file(name)
                 skip_if_paragraph = true;
                 break;
             case 'require':
-                value = value.replace('!require').trim();
+                value = value.replace('!require', '').trim();
                 doc.add_required(value);
                 skip_if_paragraph = true;
                 break;
             case 'css':
-                value = value.replace('!css').trim();
+                value = value.replace('!css', '').trim();
                 doc.add_css(value);
                 skip_if_paragraph = true;
                 break;
             case 'html':
-                doc.add_node(new RawHTML(value));
+                doc.add_node(new RawHTML(value.substring(6)));
                 skip_if_paragraph = true;
                 break;
             case 'markup':
-                if (next !== null && next.getType() === 'paragraph')
+                if (next !== null && ['paragraph', 'newline'].includes(next.getType()))
                 {
                     skip_if_paragraph = true;
-                    doc.add_node(new Div(value));
+                    doc.add_node(new Div(value.substring(2, value.length-2)));
                 }
                 else
                 {
-                    doc.add_node(new Markup(value));
+                    doc.add_node(new Markup(value.substring(2, value.length-2).trim()));
                 }
                 break;
             case 'label':
@@ -1166,7 +1553,7 @@ function process_file(name)
                 skip_if_paragraph = true;
                 break;
             case 'normal':
-                doc.add_node(new Text(value.trim()));
+                doc.add_node(new Text(value));
                 break;
             case 'comment':
                 doc.add_node(new Comment(value));
@@ -1210,22 +1597,22 @@ function process_file(name)
             case 'table_header_line':
                 doc.add_node(new TableHeader());
                 break;
-            case 'TableLineStart':
+            case 'table_line_start':
                 doc.add_node(new TableLineStart());
                 break;
-            case 'TableLineEnd':
+            case 'table_line_end':
                 doc.add_node(new TableLineEnd());
+                break;
+            case 'table_line_header_start':
+                doc.add_node(new TableLineStart(true));
                 break;
             default:
                 console.log(index, tok);
-                throw new Error("What to do?");
+                throw new Error("What to do with: " + tok);
         }
     }
     doc.info();
     // Emitting HTML
-    console.log("\n------------------------------------------------------------------------");
-    console.log("TO HTML");
-    console.log("------------------------------------------------------------------------\n");
     fs.writeFileSync('out.html', doc.to_html());
 }
 

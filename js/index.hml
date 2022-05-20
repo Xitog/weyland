@@ -27,12 +27,13 @@
 Bonjour visiteur !
 
 Ce site web personnel présente mes différents projets, codés ou écrits, en espérant qu'ils vous soient utiles.
+
 Ils traitent de linguistique, d'informatique, d'histoire et des jeux, vidéo ou non.
 
 | Codes          |                                                                                                                        |
 |-----------------------------------------------------------------------------------------------------------------------------------------|
-| [[Ash]]        | un langage de programmation simple et concis ([[manuel->ash]], [[démo->ash_repl]], [[source->ash_git]])                |
-| [[Hamill]]     | un langage de balisage léger pour produire du HTML ([[manuel->hamill]], [[démo->hamill_live]], [[source->hamill_git]]) |
+| [[Ash]]        | un langage de programmation simple et concis ([[manuel->Ash]], [[démo->ash_repl]], [[source->ash_git]])                |
+| [[Hamill]]     | un langage de balisage léger pour produire du HTML ([[manuel->Hamill]], [[démo->hamill_live]], [[source->hamill_git]]) |
 | [[Teddy]]      | un éditeur de cartes basée sur une grille pour les jeux ([[source->teddy_git]])                                        |
 | [[RTS]]        | un prototype de RTS inspiré des classiques des années 90                                                               |
 
@@ -42,7 +43,7 @@ Ils traitent de linguistique, d'informatique, d'histoire et des jeux, vidéo ou 
 | Articles techniques     | [[transition]] entre tuiles, [[raycasting]] en 2.5D, [[dialogues]]                    |
 | Collections             | [[outils]], [[prénoms]]                                                               |
 | Histoire du jeu vidéo   | [[FPS->earlyFPS]] et [[RTS->earlyRTS]]                                                |
-| Programmation           | manuels [[Python->python]], [[Ruby]], [[Lua]], fiches [[BNF]] et [[JSON]]             |
+| Programmation           | manuels [[Python]], [[Ruby]], [[Lua]], fiches [[BNF]] et [[JSON]]                     |
 | Italien                 | [[grammaire italienne->beatrice]], [[jeu sur la conjugaison->itagame]]                |
 | Français                | fiche sur les [[phonèmes->frphon]] et [[outil d'analyse->frana]]                      |
 | Anglais                 | [[liste de verbes fréquents->enverbs]] et [[jeu sur le vocabulaire->engame]]          |
