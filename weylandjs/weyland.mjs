@@ -445,11 +445,34 @@ class Test
     }
 }
 
+//-----------------------------------------------------------------------------
+// Tagged lines
+//-----------------------------------------------------------------------------
 
-class Node
+class Line
+{
+    constructor(value, type)
+    {
+        this.value = value;
+        this.type = type;
+    }
+
+    toString()
+    {
+        return `${this.type} |${this.value}|`;
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Document nodes
+//-----------------------------------------------------------------------------
+
+class EmptyNode {}
+class Node extends EmptyNode
 {
     constructor(content=null)
     {
+        super();
         this.content = content;
     }
 
@@ -463,14 +486,13 @@ class Node
         }
     }
 }
-
 class Text extends Node {}
+class Start extends Node {}
+class Stop extends Node {}
+class HR extends EmptyNode {}
 class Comment extends Node {}
-class Div extends Node {}
-class Markup extends Node {}
 class RawHTML extends Node {}
-class NewLine extends Node {}
-class EndOfParagraph extends Node {}
+class Include extends Node {}
 class Title extends Node
 {
     constructor(content, level)
@@ -479,39 +501,83 @@ class Title extends Node
         this.level = level;
     }
 }
-class Link extends Node {}
-class HR extends Node {}
-class Include extends Node {}
-class Macro extends Node {}
-class TableSeparator extends Node {}
-class TableHeader extends Node {}
-class TableLineEnd extends Node {}
-class TableLineStart extends Node
+class StartDiv extends EmptyNode
 {
-    constructor(header=false)
+    constructor(id, cls)
     {
-        super(null);
-        this.header = header;
-    }
-
-    toString()
-    {
-        if (this.header)
-        {
-            return 'TableLineStart (header)';
-        }
-        else
-        {
-            return 'TableLineStart';
-        }
+        super();
+        this.id = id;
+        this.cls = cls;
     }
 }
+class EndDiv extends EmptyNode {}
+class Composite extends EmptyNode
+{
+    constructor()
+    {
+        super(null);
+        this.children = [];
+    }
+    add_child(o)
+    {
+        this.children.push(o);
+    }
+    add_children(ls)
+    {
+        this.children = this.children.concat(ls);
+    }
+}
+class TextLine extends Composite
+{
+    constructor(children=[])
+    {
+        super();
+        this.add_children(children);
+    }
+}
+class ListItem extends Composite
+{
+    constructor(ordered=false, reverse=false, level=0, children=[])
+    {
+        super();
+        this.add_children(children);
+        this.level = level;
+        this.ordered = ordered;
+        this.reverse = reverse;
+    }
+}
+// [[label]] (you must define somewhere ::label:: https://) display = url
+// [[https://...]] display = url
+// [[display->label]] (you must define somewhere ::label:: https://)
+// [[display->https://...]]
+class Link extends EmptyNode
+{
+    constructor(url, display)
+    {
+        super();
+        this.url = url;
+        this.display = display;
+    }
+}
+class Definition extends Node
+{
+    constructor(header, content)
+    {
+        super(content);
+        this.header = header;
+    }
+}
+
+class Markup extends Node {}
+class Macro extends Node {}
+// Table
 
 class Document
 {
     constructor()
     {
         this.constants = {};
+        this.variables = {};
         this.required = [];
         this.css = [];
         this.labels = {};
@@ -521,6 +587,11 @@ class Document
     add_constant(k, v)
     {
         this.constants[k] = v;
+    }
+
+    set_variable(k, v)
+    {
+        this.variables[k] = v;
     }
 
     add_required(r)
@@ -581,6 +652,117 @@ class Document
         return text.toLocaleLowerCase().replace(/ /g, '-');
     }
 
+    string_to_html(content, nodes)
+    {
+        for (let node of nodes)
+        {
+            let markups = {
+                'bold': 'b',
+                'italic': 'i',
+                'stroke': 's',
+                'underline': 'u',
+                'sup': 'sup',
+                'sub': 'sub'
+            }
+            if (node instanceof Start)
+            {
+                content += `<${markups[node.content]}>`;
+            }
+            else if (node instanceof Stop)
+            {
+                content += `</${markups[node.content]}>`;
+            }
+            else if (node instanceof Text)
+            {
+                content += node.content;
+            }
+            else if (node instanceof Link)
+            {
+                let url = node.url;
+                let display = node.display;
+                if (!url.startsWith('https://') && !url.startsWith('http://'))
+                {
+                    if (url === '#')
+                    {
+                        url = '#' + this.make_anchor(display);
+                    }
+                    else
+                    {
+                        url = this.get_label(url);
+                    }
+                }
+                if (display === undefined || display === null)
+                {
+                    display = url;
+                }
+                content += `<a href="${url}">${display}</a>`;
+            }
+            else
+            {
+                throw new Error("Impossible to handle this type of node: " + node.constructor.name);
+            }
+        }
+        return content;
+    }
+
+    assure_list_consistency(content, stack, level, ordered, reverse)
+    {
+        //console.log('lvl', level, 'len', stack.length);
+        if (level > stack.length)
+        {
+            while (level > stack.length)
+            {
+                let starter = (stack.length > 0) ? "\n" : "";
+                stack.push({'ordered': ordered, 'reverse': reverse, 'level': stack.length + 1});
+                if (ordered && reverse)
+                {
+                    content += starter + "  ".repeat(level * 2) + "<ol reversed>";
+                    content += "\n" + "  ".repeat(level * 2 + 1) + "<li>";
+                }
+                else if (ordered)
+                {
+                    content += starter + "  ".repeat(level * 2) + "<ol>";
+                    content += "\n" + "  ".repeat(level * 2 + 1) + "<li>";
+                }
+                else
+                {
+                    content += starter + "  ".repeat(level * 2) + "<ul>";
+                    content += "\n" + "  ".repeat(level * 2 + 1) + "<li>";
+                }
+            }
+        }
+        else if (level < stack.length)
+        {
+            while (level < stack.length)
+            {
+                let o = stack.pop();
+                if (o['ordered'])
+                {
+                    content += "</li>\n" + "  ".repeat(o['level'] * 2) + "</ol>\n";
+                    if (stack.length > 0)
+                    {
+                        content += "  ".repeat(o['level'] * 2 - 1) + "</li>\n";
+                        if (level !== 0) content += "  ".repeat(o['level'] * 2 - 1) + "<li>";
+                    }
+                }
+                else
+                {
+                    content += "</li>\n" + "  ".repeat(o['level'] * 2) + "</ul>\n";
+                    if (stack.length > 0)
+                    {
+                        content += "  ".repeat(o['level'] * 2 - 1) + "</li>\n";
+                        if (level !== 0) content += "  ".repeat(o['level'] * 2 - 1) + "<li>";
+                    }
+                }
+            }
+        }
+        else
+        {
+            content += "</li>\n" + "  ".repeat(level * 2 + 1) + "<li>";
+        }
+        return content;
+    }
+
     to_html(discard_comment=true)
     {
         let start_time = new Date();
@@ -619,7 +801,7 @@ class Document
             {
                 if (req.endsWith('.js'))
                 {
-                    content += `<script src="${req}"></script>\n`;
+                    content += `  <script src="${req}"></script>\n`;
                 }
             }
         }
@@ -628,45 +810,53 @@ class Document
         let first_text = true;
         let not_processed = 0;
         let types_not_processed = [];
+        // Table
         let in_table = false;
         let in_header_line = false;
+        // List
+        let stack = [];
+        // Paragraph
+        let in_paragraph = false;
+        let in_def_list = false;
         for (const [index, node] of this.nodes.entries())
         {
-            //console.log(index, node, first_text);
-            let next = null;
-            if (index + 1 < this.nodes.length)
+            //console.log(content.substring(content.indexOf('<body>')));
+            console.log(index, node);
+
+            // Consistency
+            if (!(node instanceof TextLine) && in_paragraph)
             {
-                next = this.nodes[index + 1];
+                content += "</p>\n";
+                in_paragraph = false;
             }
-            if (node instanceof Text)
+            if (!(node instanceof ListItem) && stack.length > 0)
             {
-                if (first_text && !in_table)
-                {
-                    content += "<p>";
-                    first_text = false;
-                }
-                content += node.content;
+                content = this.assure_list_consistency(content, stack, 0, null, null);
             }
-            else if (node instanceof NewLine)
+            if (!(node instanceof Definition) && in_def_list)
             {
-                if (in_table)
-                {
-                    content += "</table>\n";
-                    in_table = false;
-                    content += "\n";
-                }
+                content += "</dl>\n";
+                in_def_list = false;
             }
-            else if (node instanceof EndOfParagraph)
+
+            // Handling of nodes
+            if (node instanceof ListItem)
             {
-                if (!in_table)
-                {
-                    content += "</p>\n";
-                    first_text = true;
-                } else {
-                    content += "</table>\n";
-                    in_table = false;
-                    content += "\n";
-                }
+                content = this.assure_list_consistency(content, stack, node.level, node.ordered, node.reverse);
+                content = this.string_to_html(content, node.children);
+            }
+            else if (node.constructor.name === 'EmptyNode')
+            {
+                // Nothing, it is just too close the paragraph, done above.
+            }
+            else if (node instanceof Include)
+            {
+                let file = fs.readFileSync(node.content);
+                content += file + "\n";
+            }
+            else if (node instanceof Title)
+            {
+                content += `<h${node.level} id="${this.make_anchor(node.content)}">${node.content}</h${node.level}>\n`;
             }
             else if (node instanceof Comment)
             {
@@ -678,10 +868,79 @@ class Document
             else if (node instanceof HR)
             {
                 content += "<hr>\n";
-            } else if (node instanceof Title)
-            {
-                content += `<h${node.level} id="${this.make_anchor(node.content)}">${node.content}</h${node.level}>\n`;
             }
+            else if (node instanceof StartDiv)
+            {
+                if (node.id !== '' && node.cls !== '')
+                {
+                    content += `<div id="${node.id}" class="${node.cls}">\n`;
+                }
+                else if (node.id !== '')
+                {
+                    content += `<div id="${node.id}">\n`;
+                }
+                else if (node.cls !== '')
+                {
+                    content += `<div class="${node.cls}">\n`;
+                }
+                else
+                {
+                    content += '<div>';
+                }
+            }
+            else if (node instanceof EndDiv)
+            {
+                content += "</div>";
+            }
+            else if (node instanceof RawHTML)
+            {
+                content += node.content + "\n";
+            }
+            else if (node instanceof TextLine)
+            {
+                if (!in_paragraph)
+                {
+                    in_paragraph = true;
+                    content += "<p>";
+                } else {
+                    content += "<br>\n";
+                }
+                content = this.string_to_html(content, node.children);
+            }
+            else if (node instanceof Definition)
+            {
+                if (!in_def_list)
+                {
+                    in_def_list = true;
+                    content += "<dl>\n";
+                }
+                content += '<dt>';
+                content = this.string_to_html(content, node.header) + "</dt>\n";
+                content += '<dd>'
+                content = this.string_to_html(content, node.content) + '</dd>\n';
+            }
+            else
+            {
+                console.log(index, node);
+                not_processed += 1;
+                if (!(node.constructor.name in types_not_processed))
+                {
+                    types_not_processed[node.constructor.name] = 0;
+                }
+                types_not_processed[node.constructor.name] += 1;
+            }
+        }
+        if (in_paragraph)
+        {
+            content += "</p>\n";
+            in_paragraph = false;
+        }
+        if (stack.length > 0)
+        {
+            content = this.assure_list_consistency(content, stack, 0, null, null);
+            //console.log(content.substring(content.indexOf('<body>'))); // XXX
+        }
+        /*
             else if (node instanceof TableLineStart)
             {
                 if (!first_text)
@@ -734,132 +993,6 @@ class Document
                     content += "</td><td>";
                 }
             }
-            else if (node instanceof Link)
-            {
-                // [[label]] (you must define somewhere ::label:: https://) display = url
-                // [[https://...]] display = url
-                // [[display->label]] (you must define somewhere ::label:: https://)
-                // [[display->https://...]]
-                let parts = node.content.split('->');
-                let link_display = null;
-                let link_url = null;
-                if (parts.length === 1)
-                {
-                    link_display = parts[0];
-                    if (parts[0].substring(0, 7) === 'http://' || parts[0].substring(0, 8) === 'https://')
-                    {
-                        link_url = parts[0];
-                    }
-                    else
-                    {
-                        link_url = this.get_label(parts[0]);
-                    }
-                }
-                else
-                {
-                    link_display = parts[0];
-                    // HACK
-                    let tokens = LEXERS['hamill'].lex(link_display);
-                    let in_sup = false;
-                    let in_sub = false;
-                    let in_bold = false;
-                    let in_italic = false;
-                    let in_underline = false;
-                    let in_stroke = false;
-                    link_display = '';
-                    for (let tok of tokens)
-                    {
-                        switch (tok.getType())
-                        {
-                            case 'normal':
-                                link_display += tok.getValue();
-                                break;
-                            case 'sup':
-                                if (!in_sup) { link_display += '<sup>'; in_sup = true; }
-                                else { link_display += '</sup>'; in_sup = false; }
-                                break;
-                            case 'sub':
-                                if (!in_sub) { link_display += '<sub>'; in_sub = true; }
-                                else { link_display += '</sub>'; in_sub = false; }
-                                break;
-                            case 'bold':
-                                if (!in_bold) { link_display += '<b>'; in_bold = true; }
-                                else { link_display += '</b>'; in_bold = false; }
-                                break;
-                            case 'italic':
-                                if (!in_italic) { link_display += '<i>'; in_italic = true; }
-                                else { link_display += '</i>'; in_italic = false; }
-                                break;
-                            case 'underline':
-                                if (!in_underline) { link_display += '<u>'; in_underline = true; }
-                                else { link_display += '</u>'; in_underline = false; }
-                                break;
-                            case 'stroke':
-                                if (!in_stroke) { link_display += '<s>'; in_stroke = true; }
-                                else { link_display += '</s>'; in_stroke = false; }
-                                break;
-                            default:
-                                throw new Error("Miniparsing doesn't authorize this kind of token: " + tok);
-                        }
-
-                    }
-                    if (parts[1].substring(0, 7) === 'http://' || parts[1].substring(0, 8) === 'https://')
-                    {
-                        link_url = parts[1];
-                    }
-                    else
-                    {
-                        link_url = this.get_label(parts[1]);
-                    }
-                }
-                content += `<a href="${link_url}">${link_display}</a>`;
-            }
-            else if (node instanceof Div)
-            {
-                let parts = node.content.split(' ');
-                if (parts.length === 1 && parts[0].trim() === 'end')
-                {
-                    content += '</div>\n';
-                    continue;
-                }
-                let div_id = null;
-                let div_class = null;
-                for (let i in parts)
-                {
-                    let p = parts[i];
-                    p = p.trim();
-                    // Reading
-                    if (p.substring(0,1) === '#')
-                    {
-                        div_id = p.substring(1);
-                    }
-                    else if (p.substring(0,1) === '.')
-                    {
-                        div_class = p.substring(1);
-                    }
-                }
-                // Producing
-                if (div_id === null && div_class === null)
-                {
-                    content += "<div>\n";
-                }
-                else if (div_id !== null && div_class === null)
-                {
-                    content += `<div id="${div_id}">\n`;
-                }
-                else if (div_id === null && div_class !== null)
-                {
-                    content += `<div class="${div_class}">\n`;
-                }
-                else
-                {
-                    content += `<div id="${div_id}" class="${div_class}">\n`;
-                }
-            }
-            else if (node instanceof RawHTML)
-            {
-                content += node.content + "\n";
-            }
             else if (node instanceof Markup)
             {
                 let klass = null;
@@ -900,22 +1033,13 @@ class Document
                     throw new Error("Macro unknown: " + node.content);
                 }
             }
-            else if (node instanceof Include)
-            {
-                let file = fs.readFileSync(node.content);
-                content += file + "\n";
-            }
             else
             {
                 console.log('Pb : ', index, "" + node, node.constructor.name);
                 not_processed += 1;
-                if (!(node.constructor.name in types_not_processed))
-                {
-                    types_not_processed[node.constructor.name] = 0;
-                }
-                types_not_processed[node.constructor.name] += 1;
+
             }
-        }
+        }*/
         if (in_table)
         {
             content += "</table>\n";
@@ -925,10 +1049,14 @@ class Document
             content += "</p>\n";
         }
         content += "</body>";
-        console.log('\nNodes not processed:', not_processed, '/', this.nodes.length, 'types :');
-        for (let [k, v] of Object.entries(types_not_processed))
+        console.log('\nNodes processed:', this.nodes.length - not_processed, '/', this.nodes.length);
+        if (not_processed > 0)
         {
-            console.log('   -', k, v);
+            console.log(`Nodes not processed ${not_processed}:`);
+            for (let [k, v] of Object.entries(types_not_processed))
+            {
+                console.log('   -', k, v);
+            }
         }
         let end_time = new Date();
         let elapsed = (end_time - start_time)/1000;
@@ -1078,11 +1206,12 @@ const LANGUAGES = {
             'paragraph': ['(\n|\n\r|\r\n){2}'],
             'comment': ['//.*(\n|$)'],
             'markup': ['\\{\\{[^\\}]*\\}\\}'],
+            'markup_wrong': ['\\{\\{[^\\}]*'],
             'list': ['^([\t ])*(\\* )+'],
             //'link': ['[ \t]*\\[\\[[^\\]]*\\]\\][ \t]*'],
             'link': ['\\[\\[[^\\]]*\\]\\]*'],
             'bold': ['\\*\\*'],
-            'special': ['\\\\\\*\\*', '\\*',"'", '\\^'],
+            'special': ['\\\\\\*\\*', '\\*',"'", '\\^', ':', '\\{', '\\}'],
             'italic': ["''"],
             'sup': ["\\^\\^"],
             'title': ['#+[^\n\r]*'],
@@ -1094,6 +1223,7 @@ const LANGUAGES = {
             'css': ['!css [^\n\r]*'],
             'html': ['!html [^\n\r]*'],
             'label': ['::[^:\n\r]*::[ \t]*'],
+            'label_wrong': ['::[^:\n\r]*'],
             'url': ['(https://|http://)[\\w\\./#]*'],
             'url_wrong': ['(https:|http:)'],
             'table_header_line': ['\\|-+\\|'],
@@ -1108,7 +1238,7 @@ const LANGUAGES = {
         // ni le "futur", càd https:/ Il faut au moins deux / pour embrayer sur la définition url.
         // On a pas ça avec les tokens d'un langage de prog. Ils se contiennent eux-mêmes :
         // i sera valide en id, même s'il fait partir de if plus tard.
-        ['table_header_wrong', 'url_wrong'],
+        ['table_header_wrong', 'url_wrong', 'label_wrong', 'markup_wrong'],
         // Special
         {
             'ante_identifier': ['var', 'const'],
@@ -1117,10 +1247,15 @@ const LANGUAGES = {
         function(tokens)
         {
             let res = [];
+            // Dump #0
+            /*for (let [index, tok] of tokens.entries())
+            {
+                console.log('dump #0', index, tok);
+            }*/
             // Première passe, fusion des speciaux / liste
             for (const [index, tok] of tokens.entries())
             {
-                if (tok.getType() === 'special' || (tok.getType() === 'list' && index > 0 && !['newline', 'table'].includes(tokens[index-1].getType())))
+                if (tok.getType() === 'special' || (tok.getType() === 'list' && index > 0 && !['newline', 'table', 'paragraph'].includes(tokens[index-1].getType())))
                 {
                     if (index > 0 && res.length > 0 && res[res.length - 1].getType() === 'normal')
                     {
@@ -1240,17 +1375,6 @@ const LANGUAGES = {
             return res3;
         }
     ),
-
-            /*'bold': '[^\\]\*\*',
-        'italic': "[^\\]''",
-        'underline': '[^\\]__',
-        'sup': '[^\\]^^',
-        'sub': '[^\\]%%',
-        'stroke': '[^\\]--',
-        'code': '[^\\]@@',
-        'link_start': '[^\\]\[\[',
-        'link_end': '[^\\]\]\]',*/
-
     'json': new Language('json',
         {
             'boolean': ['true', 'false'],
@@ -1450,7 +1574,9 @@ function tests()
     console.log("Test de process_file (hamill)");
     console.log("------------------------------------------------------------------------\n");
 
-    process_file('index.hml');
+    //process_file('index.hml');
+    //process_file('tools_langs.hml');
+    process_file('../../dgx/static/input/informatique/tools_langs.hml');
 }
 
 var DEBUG = false;
@@ -1458,13 +1584,11 @@ tests();
 
 import fs from 'fs';
 
-
-function process_file(filename)
+// Take a filename, return a list of tagged lines
+function process_file(filename, debug=true)
 {
-    let data = null;
-    // require is specific to Node.js
-    //const fs = require('fs');
-    let doc = new Document();
+    if (debug) console.log('Processing file:', filename);
+    let data;
     try
     {
         data = fs.readFileSync(filename, 'utf8');
@@ -1474,105 +1598,122 @@ function process_file(filename)
             console.error(err);
             return;
     }
-    const tokens = LEXERS['hamill'].lex(data);
-    let skip_if_paragraph = true;
-    let skip_next = false;
-    for (const [index, tok] of tokens.entries())
+    let raw = data.replace(/\r\n/g, "\n").replace(/\n\r/g, "\n").replace(/\r/g, "\n").split("\n");
+    if (debug) console.log('Number of raw lines:', raw.length);
+    let lines = [];
+    let next_is_def = false;
+    for (const [index, value] of raw.entries())
     {
-        // Skipping
-        if (skip_next === true)
+        let trimmed = value.trim();
+        if (trimmed.length === 0)
         {
-            skip_next = false;
-            continue;
+            lines.push(new Line('', 'empty'));
         }
-        if (skip_if_paragraph && (tok.getType() === 'paragraph' || tok.getType() === 'newline'))
+        else if (trimmed[0] === '#')
         {
-            continue; // Skip ALL the next paragraphs
+            lines.push(new Line(trimmed, 'title'));
         }
-        skip_if_paragraph = false;
-        // Getting the next token
-        let next = null;
-        if (index + 1 < tokens.length)
+        else if ((trimmed.match(/-/g)||[]).length === trimmed.length)
         {
-            next = tokens[index + 1];
+            lines.push(new Line('', 'separator'));
         }
-        // Getting the current token's value
-        let value = tok.getValue();
-        // Processing
-        switch(tok.getType())
+        else if (trimmed.substring(0, 2) === '* ')
         {
-            case 'paragraph':
-                doc.add_node(new EndOfParagraph());
-                skip_if_paragraph = true;
-                break;
-            case 'const':
-                let s = value.replace('!const', '').split('=');
-                let id = s[0].trim();
-                value = s[1].trim();
-                doc.add_constant(id, value);
-                skip_if_paragraph = true;
-                break;
-            case 'require':
-                value = value.replace('!require', '').trim();
-                doc.add_required(value);
-                skip_if_paragraph = true;
-                break;
-            case 'css':
-                value = value.replace('!css', '').trim();
-                doc.add_css(value);
-                skip_if_paragraph = true;
-                break;
-            case 'html':
-                doc.add_node(new RawHTML(value.substring(6)));
-                skip_if_paragraph = true;
-                break;
-            case 'markup':
-                if (next !== null && ['paragraph', 'newline'].includes(next.getType()))
-                {
-                    skip_if_paragraph = true;
-                    doc.add_node(new Div(value.substring(2, value.length-2)));
-                }
-                else
-                {
-                    doc.add_node(new Markup(value.substring(2, value.length-2).trim()));
-                }
-                break;
-            case 'label':
-                if (next === null || next.getType() !== 'url')
-                {
-                    throw new Error("Label " + tok + " must be followed by an URL and is followed by: " + next.getType());
-                }
-                let label = value.replace(/::/g, '').trim();
-                let url = next.getValue().trim();
-                doc.add_label(label, url)
-                skip_next = true;
-                skip_if_paragraph = true;
-                break;
-            case 'newline':
-                doc.add_node(new NewLine()); // don't discard for table !
-                skip_if_paragraph = true;
-                break;
-            case 'normal':
-                doc.add_node(new Text(value));
-                break;
-            case 'comment':
-                doc.add_node(new Comment(value));
-                skip_if_paragraph = true;
-                break;
-            case 'include':
-                let include = value.replace('!include', '').trim();
-                doc.add_node(new Include(include));
-                skip_if_paragraph = true;
-                break;
-            case 'hr':
-                doc.add_node(new HR());
-                skip_if_paragraph = true;
-                break;
+            lines.push(new Line(value, 'unordered_list'));
+        }
+        else if (trimmed.substring(0, 2) === '+ ')
+        {
+            lines.push(new Line(value, 'ordered_list'));
+        }
+        else if (trimmed.substring(0, 2) === '- ')
+        {
+            lines.push(new Line(value, 'reverse_list'));
+        }
+        else if (trimmed.substring(0, 5) === '!var ')
+        {
+            lines.push(new Line(trimmed, 'var'));
+        }
+        else if (trimmed.substring(0, 7) === '!const ')
+        {
+            lines.push(new Line(trimmed, 'const'));
+        }
+        else if (trimmed.substring(0, 9) === '!include ')
+        {
+            lines.push(new Line(trimmed, 'include'));
+        }
+        else if (trimmed.substring(0, 9) === '!require ')
+        {
+            lines.push(new Line(trimmed, 'require'));
+        }
+        else if (trimmed.substring(0, 2) === '//')
+        {
+            lines.push(new Line(trimmed, 'comment'));
+        }
+        else if (trimmed.substring(0, 2) === '::')
+        {
+            lines.push(new Line(trimmed, 'label'));
+        }
+        else if (trimmed.substring(0, 2) === '{{' && trimmed.substring(trimmed.length - 2) === '}}')
+        {
+            // On va dire que c'est que des div
+            lines.push(new Line(trimmed, 'div'));
+        }
+        else if (trimmed[0] === '|' && trimmed[trimmed.length - 1] === '|')
+        {
+            line.push(new Line(trimmed, 'row'));
+        }
+        else if (trimmed.substring(0, 2) === '$ ')
+        {
+            lines.push(new Line(trimmed.substring(2), 'definition-header'));
+            next_is_def = true;
+        }
+        else
+        {
+            if (!next_is_def)
+            {
+                lines.push(new Line(trimmed, 'text'));
+            }
+            else
+            {
+                lines.push(new Line(trimmed, 'definition-content'));
+                next_is_def = false;
+            }
+        }
+    }
+
+    if (debug)
+    {
+        console.log('Lines:');
+        for (const [index, line] of lines.entries())
+        {
+            console.log(`${index}: ${line}`);
+        }
+        console.log();
+    }
+
+    let doc = process_lines(lines, debug);
+    let outfilename = filename.split('.hml')[0] + '.html';
+    fs.writeFileSync(outfilename, doc.to_html());
+}
+
+// Take a list of tagged lines return a valid Hamill document
+function process_lines(lines, debug=false)
+{
+    if (debug) console.log(`Processing ${lines.length} lines`);
+    let doc = new Document();
+    let definition = null;
+    for (const [index, line] of lines.entries())
+    {
+        let text = undefined;
+        let id = undefined;
+        let value = undefined;
+        switch (line.type)
+        {
             case 'title':
                 let lvl = 0;
-                for (let i = 0; i < value.length; i++)
+                for (const char of line.value)
                 {
-                    if (value[i] === '#')
+                    if (char === '#')
                     {
                         lvl += 1;
                     }
@@ -1581,40 +1722,336 @@ function process_file(filename)
                         break;
                     }
                 }
-                doc.add_node(new Title(value.substring(lvl+1).trim(), lvl));
-                skip_if_paragraph = true;
+                text = line.value.substring(lvl+1).trim();
+                doc.add_node(new Title(text, lvl));
+                doc.add_label(doc.make_anchor(text), '#' + doc.make_anchor(text));
                 break;
-            case 'link':
-                value = value.trim()
-                doc.add_node(new Link(value.substring(2, value.length-2)));
+            case 'separator':
+                doc.add_node(new HR());
                 break;
-            case 'macro':
-                doc.add_node(new Macro(value));
+            case 'text':
+                let n = process_string(line.value, debug);
+                doc.add_node(new TextLine(n));
                 break;
-            case 'table':
-                doc.add_node(new TableSeparator());
+            case 'unordered_list':
+            case 'ordered_list':
+            case 'reverse_list':
+                let ordered = false;
+                let reverse = false;
+                if (line.type === 'unordered_list')
+                {
+                    // Nothing
+                }
+                else if (line.type === 'ordered_list')
+                {
+                    ordered = true;
+                }
+                else if (line.type === 'reverse_list')
+                {
+                    ordered = true;
+                    reverse = true;
+                }
+                let delimiters = {'unordered_list': '* ', 'ordered_list': '+ ', 'reverse_list': '- '};
+                let delimiter = delimiters[line.type];
+                let list_lvl = Math.floor(line.value.indexOf(delimiter) / 2) + 1;
+                let list_text = line.value.substring(line.value.indexOf(delimiter) + 2).trim();
+                let list_nodes = process_string(list_text, debug);
+                doc.add_node(new ListItem(ordered, reverse, list_lvl, list_nodes));
                 break;
-            case 'table_header_line':
-                doc.add_node(new TableHeader());
+            case 'html':
+                doc.add_node(new RawHTML(line.value.replace('!html ', '').trim()));
                 break;
-            case 'table_line_start':
-                doc.add_node(new TableLineStart());
+            case 'css':
+                text = line.value.replace('!css ', '').trim();
+                doc.add_css(text);
                 break;
-            case 'table_line_end':
-                doc.add_node(new TableLineEnd());
+            case 'include':
+                let include = line.value.replace('!include ', '').trim();
+                doc.add_node(new Include(include));
                 break;
-            case 'table_line_header_start':
-                doc.add_node(new TableLineStart(true));
+            case 'require':
+                text = line.value.replace('!require ', '').trim();
+                doc.add_required(text);
+                break;
+            case 'const':
+                text = line.value.replace('!const ', '').split('=');
+                id = text[0].trim();
+                value = text[1].trim();
+                doc.add_constant(id, value);
+                break;
+            case 'var':
+                text = line.value.replace('!var ', '').split('=');
+                id = text[0].trim();
+                value = text[1].trim();
+                doc.set_variable(id, value);
+                break;
+            case 'label':
+                value = line.value.replace(/::/, '').trim();
+                text = value.split('::');
+                let label = text[0].trim();
+                let url = text[1].trim();
+                doc.add_label(label, url);
+                break;
+            case 'div':
+                value = line.value.substring(2, line.value.length - 2).trim();
+                let index2 = 0;
+                let in_class = false;
+                let in_id = false;
+                text = '';
+                id = '';
+                let cls = '';
+                while (index2 < value.length)
+                {
+                    if (value[index2] === '#' && id === '')
+                    {
+                        if (!in_id)
+                        {
+                            in_id = true;
+                        }
+                    }
+                    else if (value[index2] === '.' && cls === '')
+                    {
+                        if (!in_class)
+                        {
+                            in_class = true;
+                        }
+                    }
+                    else if (value[index2] === ' ')
+                    {
+                        in_class = false;
+                        in_id = false;
+                    }
+                    else
+                    {
+                        if (in_id)
+                        {
+                            id += value[index2];
+                        }
+                        else if (in_class)
+                        {
+                            cls += value[index2];
+                        }
+                        else
+                        {
+                            text += value[index2];
+                        }
+                    }
+                    index2 += 1;
+                }
+                if (id === '' && cls === '' && text === 'end')
+                {
+                    doc.add_node(new EndDiv());
+                }
+                else if (text === '')
+                {
+                    //console.log('Creating StartDiv', id, cls);
+                    doc.add_node(new StartDiv(id, cls));
+                }
+                // :TODO: SPAN ET P
+                // :TODO: MACRO
+                break;
+            case 'comment':
+                doc.add_node(new Comment(line.value));
+                break;
+            case 'row':
+                // :TODO: TABLE
+                break;
+            case 'empty':
+                doc.add_node(new EmptyNode());
+                break;
+            case 'definition-header':
+                definition = process_string(line.value);
+                break;
+            case 'definition-content':
+                if (definition === null)
+                {
+                    throw new Error('Definition content without header: ' + line.value);
+                }
+                doc.add_node(new Definition(definition, process_string(line.value)));
+                definition = null;
                 break;
             default:
-                console.log(index, tok);
-                throw new Error("What to do with: " + tok);
+                throw new Error(`Unknown ${line.type}`);
         }
     }
-    doc.info();
-    // Emitting HTML
-    let outfilename = filename.split('.hml')[0] + '.html';
-    fs.writeFileSync(outfilename, doc.to_html());
+    /*
+    console.log(doc);
+    for (const [index, value] of doc.nodes.entries())
+    {
+        console.log(index, value);
+    }
+    */
+    //console.log(JSON.stringify(doc));
+    return doc;
+}
+
+function process_string(str, debug=false)
+{
+    //if (debug) console.log('Processing string:', str);
+    let in_sup = false;
+    let in_sub = false;
+    let in_bold = false;
+    let in_italic = false;
+    let in_underline = false;
+    let in_stroke = false;
+    let index = 0;
+    let word = '';
+    let nodes = [];
+    while (index < str.length)
+    {
+        let char = str[index];
+        let next = (index + 1 < str.length) ? str[index + 1] : null;
+        if (char === '*' && next === '*')
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            if (!in_bold)
+            {
+                in_bold = true;
+                nodes.push(new Start('bold'))
+            }
+            else
+            {
+                in_bold = false;
+                nodes.push(new Stop('bold'));
+            }
+            index += 1;
+        }
+        else if (char === "'" && next === "'")
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            if (!in_italic)
+            {
+                in_italic = true;
+                nodes.push(new Start('italic'))
+            }
+            else
+            {
+                in_italic = false;
+                nodes.push(new Stop('italic'));
+            }
+            index += 1;
+        }
+        else if (char === '_' && next === '_')
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            if (!in_underline)
+            {
+                in_underline = true;
+                nodes.push(new Start('underline'))
+            }
+            else
+            {
+                in_underline = false;
+                nodes.push(new Stop('underline'));
+            }
+            index += 1;
+        }
+        else if (char === '-' && next === '-')
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            if (!in_stroke)
+            {
+                in_stroke = true;
+                nodes.push(new Start('stroke'))
+            }
+            else
+            {
+                in_stroke = false;
+                nodes.push(new Stop('stroke'));
+            }
+            index += 1;
+        }
+        else if (char === '^' && next === '^')
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            if (!in_sup)
+            {
+                in_sup = true;
+                nodes.push(new Start('sup'));
+            }
+            else
+            {
+                in_sup = false;
+                nodes.push(new Stop('sup'));
+            }
+            index += 1;
+        }
+        else if (char === '%' && next === '%')
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            if (!in_sub)
+            {
+                in_sub = true;
+                nodes.push(new Start('sub'));
+            }
+            else
+            {
+                in_sub = false;
+                nodes.push(new Stop('sub'));
+            }
+            index += 1;
+        }
+        else if (char === '[' && next === '[')
+        {
+            if (word.length > 0)
+            {
+                nodes.push(new Text(word));
+                word = '';
+            }
+            let end = str.indexOf(']]', index);
+            let content = str.substring(index+2, end);
+            let parts = content.split('->');
+            let display = undefined;
+            let url = undefined;
+            if (parts.length === 1)
+            {
+                url = parts[0].trim();
+            }
+            else if (parts.length === 2)
+            {
+                display = parts[0].trim();
+                url = parts[1].trim();
+            }
+            nodes.push(new Link(url, display));
+            index = end + 1;
+        }
+        else
+        {
+            word += char;
+        }
+        index += 1;
+    }
+    if (word.length > 0)
+    {
+        nodes.push(new Text(word));
+        word = '';
+    }
+    //if (debug) console.log('Result is', nodes.length, 'nodes:', nodes);
+    return nodes;
 }
 
 export {ln, Language, Token, Lexer, LANGUAGES, PATTERNS, LEXERS};
