@@ -269,8 +269,9 @@ class Variable
 
 class Document
 {
-    constructor()
+    constructor(name=null)
     {
+        this.name = name;
         this.variables = {
             'VERSION': new Variable(this, 'VERSION', 'string', 'true', 'Hamill 2.0'),
             'NOW': new Variable(this, 'NOW', 'string', 'true', ''),
@@ -280,6 +281,22 @@ class Document
         this.css = [];
         this.labels = {};
         this.nodes = [];
+    }
+
+    set_name(name)
+    {
+        this.name = name;
+    }
+
+    to_html_file(output_directory)
+    {
+        let parts = this.name.split('/');
+        let outfilename = parts[parts.length - 1];
+        outfilename = outfilename.substring(0, outfilename.lastIndexOf('.hml')) + '.html';
+        let sep = output_directory[output_directory.length - 1] === '/' ? '' : '/';
+        let target = output_directory + sep + outfilename;
+        fs.writeFileSync(target, this.to_html());
+        console.log('Outputting in:', target);
     }
 
     set_variable(k, v, t='string', c=false)
@@ -487,10 +504,13 @@ class Document
         return content;
     }
 
-    to_html(discard_comment=true)
+    to_html(header=true, discard_comment=true)
     {
         let start_time = new Date();
-        let content = `<html lang="${this.get_variable('LANG', 'en')}">
+        let content = '';
+        if (header)
+        {
+            content = `<html lang="${this.get_variable('LANG', 'en')}">
 <head>
   <meta charset=utf-8>
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -498,45 +518,48 @@ class Document
   <title>${this.get_variable('TITLE', 'Undefined title')}</title>
   <link rel="icon" href="${this.get_variable('ICON', 'Undefined icon')}" type="image/x-icon" />
   <link rel="shortcut icon" href="https://xitog.github.io/dgx/img/favicon.ico" type="image/x-icon" />\n`;
-        // For CSS
-        if (this.required.length > 0)
-        {
-            for (let req of this.required)
+            // For CSS
+            if (this.required.length > 0)
             {
-                if (req.endsWith('.css'))
+                for (let req of this.required)
                 {
-                    content += `  <link href="${req}" rel="stylesheet">\n`;
+                    if (req.endsWith('.css'))
+                    {
+                        content += `  <link href="${req}" rel="stylesheet">\n`;
+                    }
                 }
             }
-        }
-        if (this.css.length > 0)
-        {
-            content += '  <style type="text/css">\n';
-            for (let cs of this.css)
+            if (this.css.length > 0)
             {
-                content += "    " + cs + "\n";
-            }
-            content += '  </style>\n';
-        }
-        // For javascript
-        if (this.required.length > 0)
-        {
-            for (let req of this.required)
-            {
-                if (req.endsWith('.js'))
+                content += '  <style type="text/css">\n';
+                for (let cs of this.css)
                 {
-                    content += `  <script src="${req}"></script>\n`;
+                    content += "    " + cs + "\n";
+                }
+                content += '  </style>\n';
+            }
+            // For javascript
+            if (this.required.length > 0)
+            {
+                for (let req of this.required)
+                {
+                    if (req.endsWith('.js'))
+                    {
+                        content += `  <script src="${req}"></script>\n`;
+                    }
                 }
             }
+            if (header)
+            {
+                content += "</head>\n";
+                content += "<body>\n";
+            }
         }
-        content += "</head>\n";
-        content += "<body>\n";
         let first_text = true;
         let not_processed = 0;
         let types_not_processed = [];
         // Table
         let in_table = false;
-        let in_header_line = false;
         // List
         let stack = [];
         // Paragraph
@@ -700,7 +723,10 @@ class Document
         {
             content += "</p>\n";
         }
-        content += "\n  </body>\n</html>";
+        if (header)
+        {
+            content += "\n  </body>\n</html>";
+        }
         console.log('\nNodes processed:', this.nodes.length - not_processed, '/', this.nodes.length);
         if (not_processed > 0)
         {
@@ -728,586 +754,593 @@ class Document
     }
 }
 
-//-------------------------------------------------------------------------------
-// Functions
-//-------------------------------------------------------------------------------
-
-function read_markup(content)
+class Hamill
 {
-    let cls = null;
-    let in_class = false;
-    let ids = null;
-    let in_ids = false;
-    let text = null;
-    let in_text = false;
-    for (let c of content)
+     // Read a file and produce a big string
+    static read_file(filename, encoding='utf8')
     {
-        if (c === '.' && in_class === false && in_ids === false && in_text === false && cls === null && text === null)
+        let data;
+        try
         {
-            in_class = true;
-            cls = '';
-            continue;
+            data = fs.readFileSync(filename, encoding);
         }
-        else if (c === '.')
+        catch (err)
         {
-            throw new Error(`Class or text already defined for this markup: ${content}`);
+                throw new Error(err);
         }
-
-        if (c === '#' && in_class === false && in_ids === false && in_text === false && ids === null && text === null)
-        {
-            in_ids = true;
-            ids = '';
-            continue;
-        }
-        else if (c === '#')
-        {
-            throw new Error(`ID or text alreay defined for this markup: ${content}`);
-        }
-
-        if (c === ' ' && in_class)
-        {
-            in_class = false;
-        }
-
-        if (c === ' ' && in_ids)
-        {
-            in_ids = false;
-        }
-
-        if (c !== ' ' && in_class === false && in_ids === false && in_text === false && text === null)
-        {
-            in_text = true;
-            text = '';
-        }
-
-        if (in_class)
-        {
-            cls += c;
-        }
-        else if (in_ids)
-        {
-            ids += c;
-        }
-        else if (in_text)
-        {
-            text += c;
-        }
-    }
-    let has_text = (text !== null) ? true : false;
-    let has_only_text = (has_text && cls === null && ids === null) ? true : false;
-    return {'has_text': has_text, 'has_only_text': has_only_text,  'class': cls, 'id': ids, 'text': text};
-}
-//console.log(read_markup("abc"));
-//console.log(read_markup(".id1 #cls1 pipo pipo"));
-//console.log(read_markup('#cls1'));
-
-// Take a filename, return a list of tagged lines
-function process_file(filename, output_directory, debug=true)
-{
-    if (debug)
-    {
-        console.log('Processing file:', filename);
-        console.log('--------------------------------------------------------------------------');
+        return data;
     }
 
-    let data;
-    try
+    static split_lines(data)
     {
-        data = fs.readFileSync(filename, 'utf8');
+        let lines = data.replace(/\r\n/g, "\n").replace(/\n\r/g, "\n").replace(/\r/g, "\n").split("\n");
+        return lines;
     }
-    catch (err)
+
+    static tag_lines(raw)
     {
-            console.error(err);
-            return;
-    }
-    let raw = data.replace(/\r\n/g, "\n").replace(/\n\r/g, "\n").replace(/\r/g, "\n").split("\n");
-    if (debug) console.log('Number of raw lines:', raw.length);
-    let lines = [];
-    let next_is_def = false;
-    for (const [index, value] of raw.entries())
-    {
-        let trimmed = value.trim();
-        if (trimmed.length === 0)
+        let lines = [];
+        let next_is_def = false;
+        for (const [index, value] of raw.entries())
         {
-            lines.push(new Line('', 'empty'));
-        }
-        else if (trimmed[0] === '#')
-        {
-            lines.push(new Line(trimmed, 'title'));
-        }
-        else if ((trimmed.match(/-/g)||[]).length === trimmed.length)
-        {
-            lines.push(new Line('', 'separator'));
-        }
-        else if (trimmed.substring(0, 2) === '* ')
-        {
-            lines.push(new Line(value, 'unordered_list'));
-        }
-        else if (trimmed.substring(0, 2) === '+ ')
-        {
-            lines.push(new Line(value, 'ordered_list'));
-        }
-        else if (trimmed.substring(0, 2) === '- ')
-        {
-            lines.push(new Line(value, 'reverse_list'));
-        }
-        else if (trimmed.startsWith('!var '))
-        {
-            lines.push(new Line(trimmed, 'var'));
-        }
-        else if (trimmed.startsWith('!const '))
-        {
-            lines.push(new Line(trimmed, 'const'));
-        }
-        else if (trimmed.startsWith('!include '))
-        {
-            lines.push(new Line(trimmed, 'include'));
-        }
-        else if (trimmed.startsWith('!require '))
-        {
-            lines.push(new Line(trimmed, 'require'));
-        }
-        else if (trimmed.startsWith('!css '))
-        {
-            lines.push(new Line(trimmed, 'css'));
-        }
-        else if (trimmed.startsWith('!html'))
-        {
-            lines.push(new Line(trimmed, 'html'));
-        }
-        else if (trimmed.substring(0, 2) === '//')
-        {
-            lines.push(new Line(trimmed, 'comment'));
-        }
-        else if (trimmed.substring(0, 2) === '::')
-        {
-            lines.push(new Line(trimmed, 'label'));
-        }
-        else if (trimmed.substring(0, 2) === '{{' && trimmed.substring(trimmed.length - 2) === '}}')
-        {
-            // Si la ligne entière est {{ }}, c'est une div... on ne fait pas de span d'une ligne...
-            lines.push(new Line(trimmed, 'div'));
-        }
-        else if (trimmed[0] === '|' && trimmed[trimmed.length - 1] === '|')
-        {
-            lines.push(new Line(trimmed, 'row'));
-        }
-        else if (trimmed.substring(0, 2) === '$ ')
-        {
-            lines.push(new Line(trimmed.substring(2), 'definition-header'));
-            next_is_def = true;
-        }
-        else
-        {
-            if (!next_is_def)
+            let trimmed = value.trim();
+            if (trimmed.length === 0)
             {
-                lines.push(new Line(trimmed, 'text'));
+                lines.push(new Line('', 'empty'));
+            }
+            else if (trimmed[0] === '#')
+            {
+                lines.push(new Line(trimmed, 'title'));
+            }
+            else if ((trimmed.match(/-/g)||[]).length === trimmed.length)
+            {
+                lines.push(new Line('', 'separator'));
+            }
+            else if (trimmed.substring(0, 2) === '* ')
+            {
+                lines.push(new Line(value, 'unordered_list'));
+            }
+            else if (trimmed.substring(0, 2) === '+ ')
+            {
+                lines.push(new Line(value, 'ordered_list'));
+            }
+            else if (trimmed.substring(0, 2) === '- ')
+            {
+                lines.push(new Line(value, 'reverse_list'));
+            }
+            else if (trimmed.startsWith('!var '))
+            {
+                lines.push(new Line(trimmed, 'var'));
+            }
+            else if (trimmed.startsWith('!const '))
+            {
+                lines.push(new Line(trimmed, 'const'));
+            }
+            else if (trimmed.startsWith('!include '))
+            {
+                lines.push(new Line(trimmed, 'include'));
+            }
+            else if (trimmed.startsWith('!require '))
+            {
+                lines.push(new Line(trimmed, 'require'));
+            }
+            else if (trimmed.startsWith('!css '))
+            {
+                lines.push(new Line(trimmed, 'css'));
+            }
+            else if (trimmed.startsWith('!html'))
+            {
+                lines.push(new Line(trimmed, 'html'));
+            }
+            else if (trimmed.substring(0, 2) === '//')
+            {
+                lines.push(new Line(trimmed, 'comment'));
+            }
+            else if (trimmed.substring(0, 2) === '::')
+            {
+                lines.push(new Line(trimmed, 'label'));
+            }
+            else if (trimmed.substring(0, 2) === '{{' && trimmed.substring(trimmed.length - 2) === '}}')
+            {
+                // Si la ligne entière est {{ }}, c'est une div... on ne fait pas de span d'une ligne...
+                lines.push(new Line(trimmed, 'div'));
+            }
+            else if (trimmed[0] === '|' && trimmed[trimmed.length - 1] === '|')
+            {
+                lines.push(new Line(trimmed, 'row'));
+            }
+            else if (trimmed.substring(0, 2) === '$ ')
+            {
+                lines.push(new Line(trimmed.substring(2), 'definition-header'));
+                next_is_def = true;
             }
             else
             {
-                lines.push(new Line(trimmed, 'definition-content'));
-                next_is_def = false;
+                if (!next_is_def)
+                {
+                    lines.push(new Line(trimmed, 'text'));
+                }
+                else
+                {
+                    lines.push(new Line(trimmed, 'definition-content'));
+                    next_is_def = false;
+                }
             }
         }
+        return lines;
     }
 
-    if (debug)
+    static process_string(data)
     {
-        console.log('Lines:');
+        let raw = Hamill.split_lines(data);
+        let lines = Hamill.tag_lines(raw);
+        if (DEBUG)
+        {
+            console.log('Lines:');
+            for (const [index, line] of lines.entries())
+            {
+                console.log(`${index}: ${line}`);
+            }
+            console.log();
+        }
+        let doc = Hamill.process_lines(lines);
+        return doc;
+    }
+
+    // Take a filename, return a list of tagged lines, output the result in a file
+    static process_file(filename)
+    {
+        if (DEBUG)
+        {
+            console.log('Processing file:', filename);
+            console.log('--------------------------------------------------------------------------');
+        }
+        let data = Hamill.read_file(filename);
+        let doc = this.process_string(data);
+        doc.set_name(filename);
+        return doc;
+    }
+
+    // Take a list of tagged lines return a valid Hamill document
+    static process_lines(lines)
+    {
+        if (DEBUG) console.log(`Processing ${lines.length} lines`);
+        let doc = new Document();
+        let definition = null;
         for (const [index, line] of lines.entries())
         {
-            console.log(`${index}: ${line}`);
-        }
-        console.log();
-    }
-
-    let doc = process_lines(lines, debug);
-    let parts = filename.split('/');
-    let outfilename = parts[parts.length - 1];
-    outfilename = outfilename.substring(0, outfilename.lastIndexOf('.hml')) + '.html';
-    let sep = output_directory[output_directory.length - 1] === '/' ? '' : '/';
-    let target = output_directory + sep + outfilename;
-    fs.writeFileSync(target, doc.to_html());
-    console.log('Outputting in:', target);
-}
-
-// Take a list of tagged lines return a valid Hamill document
-function process_lines(lines, debug=false)
-{
-    if (debug) console.log(`Processing ${lines.length} lines`);
-    let doc = new Document();
-    let definition = null;
-    for (const [index, line] of lines.entries())
-    {
-        let text = undefined;
-        let id = undefined;
-        let value = undefined;
-        switch (line.type)
-        {
-            case 'title':
-                let lvl = 0;
-                for (const char of line.value)
-                {
-                    if (char === '#')
+            let text = undefined;
+            let id = undefined;
+            let value = undefined;
+            switch (line.type)
+            {
+                case 'title':
+                    let lvl = 0;
+                    for (const char of line.value)
                     {
-                        lvl += 1;
+                        if (char === '#')
+                        {
+                            lvl += 1;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    text = line.value.substring(lvl+1).trim();
+                    doc.add_node(new Title(text, lvl));
+                    doc.add_label(doc.make_anchor(text), '#' + doc.make_anchor(text));
+                    break;
+                case 'separator':
+                    doc.add_node(new HR());
+                    break;
+                case 'text':
+                    let n = Hamill.process_inner_string(line.value);
+                    doc.add_node(new TextLine(n));
+                    break;
+                case 'unordered_list':
+                case 'ordered_list':
+                case 'reverse_list':
+                    let ordered = false;
+                    let reverse = false;
+                    if (line.type === 'unordered_list')
+                    {
+                        // Nothing
+                    }
+                    else if (line.type === 'ordered_list')
+                    {
+                        ordered = true;
+                    }
+                    else if (line.type === 'reverse_list')
+                    {
+                        ordered = true;
+                        reverse = true;
+                    }
+                    let delimiters = {'unordered_list': '* ', 'ordered_list': '+ ', 'reverse_list': '- '};
+                    let delimiter = delimiters[line.type];
+                    let list_lvl = Math.floor(line.value.indexOf(delimiter) / 2) + 1;
+                    let list_text = line.value.substring(line.value.indexOf(delimiter) + 2).trim();
+                    let list_nodes = Hamill.process_inner_string(list_text);
+                    doc.add_node(new ListItem(ordered, reverse, list_lvl, list_nodes));
+                    break;
+                case 'html':
+                    doc.add_node(new RawHTML(line.value.replace('!html ', '').trim()));
+                    break;
+                case 'css':
+                    text = line.value.replace('!css ', '').trim();
+                    doc.add_css(text);
+                    break;
+                case 'include':
+                    let include = line.value.replace('!include ', '').trim();
+                    doc.add_node(new Include(include));
+                    break;
+                case 'require':
+                    text = line.value.replace('!require ', '').trim();
+                    doc.add_required(text);
+                    break;
+                case 'const':
+                    text = line.value.replace('!const ', '').split('=');
+                    id = text[0].trim();
+                    value = text[1].trim();
+                    doc.set_variable(id, value, 'string', true);
+                    break;
+                case 'var':
+                    text = line.value.replace('!var ', '').split('=');
+                    id = text[0].trim();
+                    value = text[1].trim();
+                    if (value === 'true') value = true;
+                    if (value === 'TRUE') value = true;
+                    if (value === 'false') value = false;
+                    if (value === 'FALSE') value = false;
+                    let type = 'string';
+                    if (typeof value === 'boolean')
+                    {
+                        type = 'boolean';
+                    }
+                    doc.add_node(new SetVar(id, value, type, false));
+                    break;
+                case 'label':
+                    value = line.value.replace(/::/, '').trim();
+                    text = value.split('::');
+                    let label = text[0].trim();
+                    let url = text[1].trim();
+                    doc.add_label(label, url);
+                    break;
+                case 'div':
+                    value = line.value.substring(2, line.value.length - 2).trim();
+                    let res = Hamill.process_inner_markup(value);
+                    if (res['has_only_text'] && res['text'] === 'end')
+                    {
+                        doc.add_node(new EndDiv());
+                    }
+                    else if (res['has_only_text'])
+                    {
+                        console.log(res);
+                        throw new Error(`Unknown quick markup: ${res['text']} in ${line}`);
                     }
                     else
                     {
-                        break;
+                        doc.add_node(new StartDiv(res['id'], res['class']));
                     }
-                }
-                text = line.value.substring(lvl+1).trim();
-                doc.add_node(new Title(text, lvl));
-                doc.add_label(doc.make_anchor(text), '#' + doc.make_anchor(text));
-                break;
-            case 'separator':
-                doc.add_node(new HR());
-                break;
-            case 'text':
-                let n = process_string(line.value, debug);
-                doc.add_node(new TextLine(n));
-                break;
-            case 'unordered_list':
-            case 'ordered_list':
-            case 'reverse_list':
-                let ordered = false;
-                let reverse = false;
-                if (line.type === 'unordered_list')
-                {
-                    // Nothing
-                }
-                else if (line.type === 'ordered_list')
-                {
-                    ordered = true;
-                }
-                else if (line.type === 'reverse_list')
-                {
-                    ordered = true;
-                    reverse = true;
-                }
-                let delimiters = {'unordered_list': '* ', 'ordered_list': '+ ', 'reverse_list': '- '};
-                let delimiter = delimiters[line.type];
-                let list_lvl = Math.floor(line.value.indexOf(delimiter) / 2) + 1;
-                let list_text = line.value.substring(line.value.indexOf(delimiter) + 2).trim();
-                let list_nodes = process_string(list_text, debug);
-                doc.add_node(new ListItem(ordered, reverse, list_lvl, list_nodes));
-                break;
-            case 'html':
-                doc.add_node(new RawHTML(line.value.replace('!html ', '').trim()));
-                break;
-            case 'css':
-                text = line.value.replace('!css ', '').trim();
-                doc.add_css(text);
-                break;
-            case 'include':
-                let include = line.value.replace('!include ', '').trim();
-                doc.add_node(new Include(include));
-                break;
-            case 'require':
-                text = line.value.replace('!require ', '').trim();
-                doc.add_required(text);
-                break;
-            case 'const':
-                text = line.value.replace('!const ', '').split('=');
-                id = text[0].trim();
-                value = text[1].trim();
-                doc.set_variable(id, value, 'string', true);
-                break;
-            case 'var':
-                text = line.value.replace('!var ', '').split('=');
-                id = text[0].trim();
-                value = text[1].trim();
-                if (value === 'true') value = true;
-                if (value === 'TRUE') value = true;
-                if (value === 'false') value = false;
-                if (value === 'FALSE') value = false;
-                let type = 'string';
-                if (typeof value === 'boolean')
-                {
-                    type = 'boolean';
-                }
-                doc.add_node(new SetVar(id, value, type, false));
-                break;
-            case 'label':
-                value = line.value.replace(/::/, '').trim();
-                text = value.split('::');
-                let label = text[0].trim();
-                let url = text[1].trim();
-                doc.add_label(label, url);
-                break;
-            case 'div':
-                value = line.value.substring(2, line.value.length - 2).trim();
-                let res = read_markup(value);
-                if (res['has_only_text'] && res['text'] === 'end')
-                {
-                    doc.add_node(new EndDiv());
-                }
-                else if (res['has_only_text'])
-                {
-                    console.log(res);
-                    throw new Error(`Unknown quick markup: ${res['text']} in ${line}`);
-                }
-                else
-                {
-                    doc.add_node(new StartDiv(res['id'], res['class']));
-                }
-                break;
-            case 'comment':
-                doc.add_node(new Comment(line.value));
-                break;
-            case 'row':
-                let content = line.value.substring(1, line.value.length - 1);
-                if (content.length === (content.match(/-/g) || []).length)
-                {
-                    let i = doc.nodes.length - 1;
-                    while (doc.get_node(i) instanceof Row)
+                    break;
+                case 'comment':
+                    doc.add_node(new Comment(line.value));
+                    break;
+                case 'row':
+                    let content = line.value.substring(1, line.value.length - 1);
+                    if (content.length === (content.match(/-/g) || []).length)
                     {
-                        doc.get_node(i).is_header = true;
-                        i -= 1;
+                        let i = doc.nodes.length - 1;
+                        while (doc.get_node(i) instanceof Row)
+                        {
+                            doc.get_node(i).is_header = true;
+                            i -= 1;
+                        }
                     }
-                }
-                else
-                {
-                    let parts = content.split('|'); // Handle escape
-                    let all_nodes = [];
-                    for (let p of parts)
+                    else
                     {
-                        let nodes = process_string(p, debug);
-                        all_nodes.push(nodes);
+                        let parts = content.split('|'); // Handle escape
+                        let all_nodes = [];
+                        for (let p of parts)
+                        {
+                            let nodes = Hamill.process_inner_string(p);
+                            all_nodes.push(nodes);
+                        }
+                        doc.add_node(new Row(all_nodes));
                     }
-                    doc.add_node(new Row(all_nodes));
-                }
-                break;
-            case 'empty':
-                doc.add_node(new EmptyNode());
-                break;
-            case 'definition-header':
-                definition = process_string(line.value);
-                break;
-            case 'definition-content':
-                if (definition === null)
-                {
-                    throw new Error('Definition content without header: ' + line.value);
-                }
-                doc.add_node(new Definition(definition, process_string(line.value)));
-                definition = null;
-                break;
-            default:
-                throw new Error(`Unknown ${line.type}`);
+                    break;
+                case 'empty':
+                    doc.add_node(new EmptyNode());
+                    break;
+                case 'definition-header':
+                    definition = Hamill.process_inner_string(line.value);
+                    break;
+                case 'definition-content':
+                    if (definition === null)
+                    {
+                        throw new Error('Definition content without header: ' + line.value);
+                    }
+                    doc.add_node(new Definition(definition, Hamill.process_inner_string(line.value)));
+                    definition = null;
+                    break;
+                default:
+                    throw new Error(`Unknown ${line.type}`);
+            }
         }
+        return doc;
     }
-    /*
-    console.log(doc);
-    for (const [index, value] of doc.nodes.entries())
+
+    static process_inner_string(str)
     {
-        console.log(index, value);
+        let in_sup = false;
+        let in_sub = false;
+        let in_bold = false;
+        let in_italic = false;
+        let in_underline = false;
+        let in_stroke = false;
+        let index = 0;
+        let word = '';
+        let nodes = [];
+        while (index < str.length)
+        {
+            let char = str[index];
+            let next = (index + 1 < str.length) ? str[index + 1] : null;
+            if (char === '*' && next === '*')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                if (!in_bold)
+                {
+                    in_bold = true;
+                    nodes.push(new Start('bold'))
+                }
+                else
+                {
+                    in_bold = false;
+                    nodes.push(new Stop('bold'));
+                }
+                index += 1;
+            }
+            else if (char === "'" && next === "'")
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                if (!in_italic)
+                {
+                    in_italic = true;
+                    nodes.push(new Start('italic'))
+                }
+                else
+                {
+                    in_italic = false;
+                    nodes.push(new Stop('italic'));
+                }
+                index += 1;
+            }
+            else if (char === '_' && next === '_')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                if (!in_underline)
+                {
+                    in_underline = true;
+                    nodes.push(new Start('underline'))
+                }
+                else
+                {
+                    in_underline = false;
+                    nodes.push(new Stop('underline'));
+                }
+                index += 1;
+            }
+            else if (char === '-' && next === '-')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                if (!in_stroke)
+                {
+                    in_stroke = true;
+                    nodes.push(new Start('stroke'))
+                }
+                else
+                {
+                    in_stroke = false;
+                    nodes.push(new Stop('stroke'));
+                }
+                index += 1;
+            }
+            else if (char === '^' && next === '^')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                if (!in_sup)
+                {
+                    in_sup = true;
+                    nodes.push(new Start('sup'));
+                }
+                else
+                {
+                    in_sup = false;
+                    nodes.push(new Stop('sup'));
+                }
+                index += 1;
+            }
+            else if (char === '%' && next === '%')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                if (!in_sub)
+                {
+                    in_sub = true;
+                    nodes.push(new Start('sub'));
+                }
+                else
+                {
+                    in_sub = false;
+                    nodes.push(new Stop('sub'));
+                }
+                index += 1;
+            }
+            else if (char === '{' && next === '{')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                let end = str.indexOf('}}', index);
+                let content = str.substring(index+2, end);
+                let res = Hamill.process_inner_markup(content);
+                if (res['has_text'])
+                {
+                    nodes.push(new Span(res['id'], res['class'], res['text']));
+                }
+                else
+                {
+                    nodes.push(new ParagraphIndicator(res['id'], res['class']));
+                }
+                index = end + 1;
+            }
+            else if (char === '[' && next === '[')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                let end = str.indexOf(']]', index);
+                let content = str.substring(index+2, end);
+                let parts = content.split('->');
+                let display = undefined;
+                let url = undefined;
+                if (parts.length === 1)
+                {
+                    url = parts[0].trim();
+                }
+                else if (parts.length === 2)
+                {
+                    display = Hamill.process_inner_string(parts[0].trim());
+                    url = parts[1].trim();
+                }
+                nodes.push(new Link(url, display));
+                index = end + 1;
+            }
+            else if (char === '$' && next === '$')
+            {
+                if (word.length > 0)
+                {
+                    nodes.push(new Text(word));
+                    word = '';
+                }
+                let end = str.indexOf('$$', index+2);
+                let content = str.substring(index+2, end);
+                nodes.push(new GetVar(content));
+                index = end + 1;
+            }
+            else
+            {
+                word += char;
+            }
+            index += 1;
+        }
+        if (word.length > 0)
+        {
+            nodes.push(new Text(word));
+            word = '';
+        }
+        return nodes;
     }
-    */
-    //console.log(JSON.stringify(doc));
-    return doc;
+
+
+    static process_inner_markup(content)
+    {
+        let cls = null;
+        let in_class = false;
+        let ids = null;
+        let in_ids = false;
+        let text = null;
+        let in_text = false;
+        for (let c of content)
+        {
+            if (c === '.' && in_class === false && in_ids === false && in_text === false && cls === null && text === null)
+            {
+                in_class = true;
+                cls = '';
+                continue;
+            }
+            else if (c === '.')
+            {
+                throw new Error(`Class or text already defined for this markup: ${content}`);
+            }
+
+            if (c === '#' && in_class === false && in_ids === false && in_text === false && ids === null && text === null)
+            {
+                in_ids = true;
+                ids = '';
+                continue;
+            }
+            else if (c === '#')
+            {
+                throw new Error(`ID or text alreay defined for this markup: ${content}`);
+            }
+
+            if (c === ' ' && in_class)
+            {
+                in_class = false;
+            }
+
+            if (c === ' ' && in_ids)
+            {
+                in_ids = false;
+            }
+
+            if (c !== ' ' && in_class === false && in_ids === false && in_text === false && text === null)
+            {
+                in_text = true;
+                text = '';
+            }
+
+            if (in_class)
+            {
+                cls += c;
+            }
+            else if (in_ids)
+            {
+                ids += c;
+            }
+            else if (in_text)
+            {
+                text += c;
+            }
+        }
+        let has_text = (text !== null) ? true : false;
+        let has_only_text = (has_text && cls === null && ids === null) ? true : false;
+        return {'has_text': has_text, 'has_only_text': has_only_text,  'class': cls, 'id': ids, 'text': text};
+    }
+
 }
 
-function process_string(str, debug=false)
-{
-    //if (debug) console.log('Processing string:', str);
-    let in_sup = false;
-    let in_sub = false;
-    let in_bold = false;
-    let in_italic = false;
-    let in_underline = false;
-    let in_stroke = false;
-    let index = 0;
-    let word = '';
-    let nodes = [];
-    while (index < str.length)
-    {
-        let char = str[index];
-        let next = (index + 1 < str.length) ? str[index + 1] : null;
-        if (char === '*' && next === '*')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            if (!in_bold)
-            {
-                in_bold = true;
-                nodes.push(new Start('bold'))
-            }
-            else
-            {
-                in_bold = false;
-                nodes.push(new Stop('bold'));
-            }
-            index += 1;
-        }
-        else if (char === "'" && next === "'")
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            if (!in_italic)
-            {
-                in_italic = true;
-                nodes.push(new Start('italic'))
-            }
-            else
-            {
-                in_italic = false;
-                nodes.push(new Stop('italic'));
-            }
-            index += 1;
-        }
-        else if (char === '_' && next === '_')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            if (!in_underline)
-            {
-                in_underline = true;
-                nodes.push(new Start('underline'))
-            }
-            else
-            {
-                in_underline = false;
-                nodes.push(new Stop('underline'));
-            }
-            index += 1;
-        }
-        else if (char === '-' && next === '-')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            if (!in_stroke)
-            {
-                in_stroke = true;
-                nodes.push(new Start('stroke'))
-            }
-            else
-            {
-                in_stroke = false;
-                nodes.push(new Stop('stroke'));
-            }
-            index += 1;
-        }
-        else if (char === '^' && next === '^')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            if (!in_sup)
-            {
-                in_sup = true;
-                nodes.push(new Start('sup'));
-            }
-            else
-            {
-                in_sup = false;
-                nodes.push(new Stop('sup'));
-            }
-            index += 1;
-        }
-        else if (char === '%' && next === '%')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            if (!in_sub)
-            {
-                in_sub = true;
-                nodes.push(new Start('sub'));
-            }
-            else
-            {
-                in_sub = false;
-                nodes.push(new Stop('sub'));
-            }
-            index += 1;
-        }
-        else if (char === '{' && next === '{')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            let end = str.indexOf('}}', index);
-            let content = str.substring(index+2, end);
-            let res = read_markup(content);
-            if (res['has_text'])
-            {
-                nodes.push(new Span(res['id'], res['class'], res['text']));
-            }
-            else
-            {
-                nodes.push(new ParagraphIndicator(res['id'], res['class']));
-            }
-            index = end + 1;
-        }
-        else if (char === '[' && next === '[')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            let end = str.indexOf(']]', index);
-            let content = str.substring(index+2, end);
-            let parts = content.split('->');
-            let display = undefined;
-            let url = undefined;
-            if (parts.length === 1)
-            {
-                url = parts[0].trim();
-            }
-            else if (parts.length === 2)
-            {
-                display = process_string(parts[0].trim());
-                url = parts[1].trim();
-            }
-            nodes.push(new Link(url, display));
-            index = end + 1;
-        }
-        else if (char === '$' && next === '$')
-        {
-            if (word.length > 0)
-            {
-                nodes.push(new Text(word));
-                word = '';
-            }
-            let end = str.indexOf('$$', index+2);
-            let content = str.substring(index+2, end);
-            nodes.push(new GetVar(content));
-            index = end + 1;
-        }
-        else
-        {
-            word += char;
-        }
-        index += 1;
-    }
-    if (word.length > 0)
-    {
-        nodes.push(new Text(word));
-        word = '';
-    }
-    //if (debug) console.log('Result is', nodes.length, 'nodes:', nodes);
-    return nodes;
-}
+//-------------------------------------------------------------------------------
+// Functions
+//-------------------------------------------------------------------------------
 
 function tests()
 {
@@ -1315,8 +1348,9 @@ function tests()
     console.log("Test de process_file (hamill)");
     console.log("------------------------------------------------------------------------\n");
 
-    process_file('../../dgx/static/input/informatique/tools_langs.hml', '../../dgx/informatique/');
-    process_file('../../dgx/static/input/index.hml', '../../dgx/');
+    Hamill.process_file('../../dgx/static/input/informatique/tools_langs.hml').to_html_file('../../dgx/informatique/');
+    Hamill.process_file('../../dgx/static/input/index.hml').to_html_file( '../../dgx/');
+    console.log(Hamill.process_string("**bonjour**").to_html(false));
 }
 
 //-------------------------------------------------------------------------------
