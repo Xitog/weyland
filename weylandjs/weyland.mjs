@@ -172,7 +172,7 @@ class Language {
 }
 
 class Token {
-	constructor(type, value, start) {
+	constructor(type, value, start, line = 0) {
 		if (DEBUG) {
 			console.log(
 				`Creating {Token} type=${type} value=|${value}| start=${start}`
@@ -181,6 +181,7 @@ class Token {
 		this.type = type;
 		this.value = value;
 		this.start = start;
+		this.line = line;
 	}
 
 	is(value, type = null, start = null) {
@@ -208,11 +209,21 @@ class Token {
 		)}  #${this.value.length} @${this.getStart()}`;
 	}
 
-	toString() {
-		let shorttype = this.type in SHORTCUTS ? SHORTCUTS[this.type] : this.type;
-		return `{${ln(this.value)}:${shorttype} @${this.start}+${
-			this.value.length
-		}}`;
+	toString(start = false, length = false, lineNumber = false) {
+		let shorttype =
+			this.type in SHORTCUTS ? SHORTCUTS[this.type] : this.type;
+		let s = `{${ln(this.value)}:${shorttype}`;
+		if (start) {
+			s +=  ` @${this.start}`;
+		}
+		if (length) {
+			s += `+${this.value.length}`;
+		}
+		if (lineNumber) {
+			s += ` L${this.line}`;
+		}
+		s += '}';
+		return s;
 	}
 }
 
@@ -275,10 +286,12 @@ class Lexer {
 		let matched = [];
 		let tokens = [];
 		let start = 0;
+		let line = 1;
 		for (let i = 0; i < text.length; i++) {
-			word += text[i];
+			let char = text[i];
+			word += char;
 			if (DEBUG) {
-				console.log(start, `${i}. @start |${ln(word)}|`);
+				console.log(`${i}. @start ${start} char=${ln(char)} |${ln(word)}| L${line}`);
 			}
 			matched = this.match(start, word);
 			if (DEBUG && matched.length === 0) {
@@ -321,16 +334,27 @@ class Lexer {
 						);
 					}
 					if (!discards.includes(old[0].type)) {
+						// Hack to put the \n on the line before
+						let correctedLine = line;
+						if (content === "\n") {
+							correctedLine -= 1;
+						}
 						tokens.push(
-							new Token(old[0].type, content, old[0].start)
+							new Token(old[0].type, content, old[0].start, correctedLine)
 						);
 					}
+					// Restart current word
 					word = "";
 					i -= 1;
 					start = old[0].start + content.length;
+					old = [];
+				}
+			} else {
+				old = matched;
+				if (char === "\n") {
+					line += 1;
 				}
 			}
-			old = matched;
 		}
 		if (old !== null && old.length > 0) {
 			let content = word;
@@ -346,7 +370,14 @@ class Lexer {
 				);
 			}
 			if (!discards.includes(old[0].type)) {
-				tokens.push(new Token(old[0].type, content, old[0].start));
+				// Hack to put the \n on the line before
+				let correctedLine = line;
+				if (content === "\n") {
+					correctedLine -= 1;
+				}
+				tokens.push(
+					new Token(old[0].type, content, old[0].start, correctedLine)
+				);
 			}
 		} else if (word.length > 0) {
 			console.log(tokens);
@@ -1361,18 +1392,7 @@ if (main) {
 		while (cmd !== "exit") {
 			cmd = reader.question(">>> ").trim();
 			let parts = cmd.split(" ");
-			if (!["exit", "help", "output", "set"].includes(parts[0])) {
-				let tokens = new Lexer(LANGUAGES[language]).lex(cmd, "blank");
-				if (tokens.length === 0) {
-					console.log("No token produced. Type exit to quit.");
-				} else {
-					if (output === "text") {
-						for (const [index, token] of tokens.entries()) {
-							console.log(`${index}. ${token}`);
-						}
-					}
-				}
-			} else if (parts[0] === "help") {
+			if (parts[0] === "help") {
 				console.log(`== Weyland v${VERSION} Help ==\n`);
 				console.log("  Type exit to quit.");
 				console.log(
@@ -1398,6 +1418,34 @@ if (main) {
 					}
 				} else {
 					console.log(`Language is set to ${language}`);
+				}
+			} else {
+				// Multilines
+				if (cmd.endsWith("\\")) {
+					while (cmd.endsWith("\\")) {
+						cmd = cmd.substring(0, cmd.length - 1) + "\n";
+						cmd += reader.question("... ").trim();
+					}
+				}
+				let tokens = new Lexer(LANGUAGES[language]).lex(cmd, "blank");
+				if (tokens.length === 0) {
+					console.log("No token produced. Type exit to quit.");
+				} else {
+					if (output === "text") {
+						let nbLines = 1;
+						let lineStart = `L${nbLines.toString().padStart(4, 0)}`;
+						let lineTokens = [];
+						for (const [index, token] of tokens.entries()) {
+							if (token.line !== nbLines) {
+								console.log(lineStart, lineTokens.join(' '));
+								nbLines = token.line;
+								lineTokens = [];
+								lineStart = `L${nbLines.toString().padStart(4, 0)}`;
+							}
+							lineTokens.push(`${index}.` + token.toString());
+						}
+						console.log(lineStart, lineTokens.join(' '));
+					}
 				}
 			}
 		}
